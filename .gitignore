@@ -1,0 +1,18 @@
+# Arduino
+*.ino.bak
+build/
+*.elf
+*.bin
+*.map
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / Cache
+*.cache
