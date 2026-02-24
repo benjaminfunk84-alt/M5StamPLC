@@ -16,3 +16,10 @@ Thumbs.db
 
 # Build / Cache
 *.cache
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.clangd/

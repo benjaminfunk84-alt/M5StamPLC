@@ -1,5 +1,9 @@
 # M5StamPLC – RFID-Controller
 
+> **Archiv:** Dieses Projekt ist archiviert (M5StamPLC defekt). Die Vorgaben wurden auf **M5CoreS3 + Zusatzmodule** umgestellt. Siehe **[ARCHIVE.md](ARCHIVE.md)** und **[VORGABEN_M5CoreS3.md](VORGABEN_M5CoreS3.md)**.
+
+---
+
 Arduino-Sketch für **M5StampPLC** mit UHF-RFID (U107), INA226 (Strom/Spannung), 4× Relais und RS485-Kommunikation zum M5Tab.
 
 ## Hardware
@@ -42,13 +46,26 @@ Befehle vom M5Tab (JSON, zeilenweise):
 - **RFID lernen:** `{"cmd":"rfid_learn"}`
 - **RFID abspielen:** `{"cmd":"rfid_play","tag":"E200..."}`
 
-## Installation
+## Entwicklung in Cursor (ohne Arduino IDE)
 
-1. Arduino IDE oder PlatformIO öffnen.
+Das Projekt ist als **PlatformIO**-Projekt eingerichtet. Alle Display-Bibliotheken (**M5StamPLC**, **M5Unified**, **M5GFX**) werden über `platformio.ini` geladen – kein manuelles Installieren nötig.
+
+- **Quellcode:** `src/main.cpp` (entspricht dem bisherigen `.ino`).
+- **Build:** Terminal `pio run` oder in Cursor **Tasks: „PlatformIO: Build“** (Strg+Shift+B).
+- **Upload:** `pio run -t upload` oder Task **„PlatformIO: Upload“**. Vorher StamPLC per USB verbinden; ggf. **Boot-Taste** gedrückt halten beim Upload.
+- **Serieller Monitor (Debug):** `pio device monitor -b 115200` oder Task **„PlatformIO: Serial Monitor“**.
+
+Environment: `m5stamplc` (Board: M5Stack StampS3). Falls das Board nicht erkannt wird, in `platformio.ini` das Environment `m5stamplc_esp32s3` verwenden.
+
+## Installation (Arduino IDE)
+
+1. Arduino IDE öffnen.
 2. Bibliotheken installieren (Library Manager): **ArduinoJson**, für das Display **M5StamPLC** (empfohlen) oder **M5Unified**.
 3. Board wählen: **M5Stamp PLC** (unter „M5Stack Boards“ bzw. „Board-Verwaltung“). Wenn du nur „ESP32 Dev Module“ wählst, erkennt M5Unified das Display evtl. nicht.
-4. Ordner `M5StamPLC_Arduino` als Sketch öffnen oder als Projekt verwenden.
+4. Ordner `M5StamPLC_Arduino` als Sketch öffnen.
 5. Kompilieren und auf den StamPLC flashen.
+
+**Probleme beim Debuggen?** Siehe **[DEBUG.md](DEBUG.md)** für typische Fehler (Display schwarz, Relais/RS485/INA226, Serial/Upload) und Lösungen.
 
 **Display bleibt schwarz?**  
 - **M5StamPLC**-Bibliothek installieren (Library Manager → M5StamPLC) – initialisiert das Display korrekt
