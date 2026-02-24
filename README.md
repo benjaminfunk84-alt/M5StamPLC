@@ -14,6 +14,7 @@ Arduino-Sketch für **M5StampPLC** mit UHF-RFID (U107), INA226 (Strom/Spannung),
 
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson)
 - Arduino ESP32 Core (Wire, EEPROM)
+- **Für das kleine Display:** [M5StamPLC](https://github.com/m5stack/M5StamPLC) (empfohlen, zieht M5Unified/M5GFX nach) oder nur [M5Unified](https://github.com/m5stack/M5Unified). **M5StamPLC** initialisiert das Display hardwaregerecht.
 
 ## Pinbelegung
 
@@ -44,10 +45,16 @@ Befehle vom M5Tab (JSON, zeilenweise):
 ## Installation
 
 1. Arduino IDE oder PlatformIO öffnen.
-2. Bibliothek **ArduinoJson** installieren (Library Manager).
-3. Ordner `M5StamPLC_Arduino` als Sketch öffnen oder als Projekt verwenden.
-4. Board: **ESP32** (passendes M5StampPLC-Board auswählen).
+2. Bibliotheken installieren (Library Manager): **ArduinoJson**, für das Display **M5StamPLC** (empfohlen) oder **M5Unified**.
+3. Board wählen: **M5Stamp PLC** (unter „M5Stack Boards“ bzw. „Board-Verwaltung“). Wenn du nur „ESP32 Dev Module“ wählst, erkennt M5Unified das Display evtl. nicht.
+4. Ordner `M5StamPLC_Arduino` als Sketch öffnen oder als Projekt verwenden.
 5. Kompilieren und auf den StamPLC flashen.
+
+**Display bleibt schwarz?**  
+- **M5StamPLC**-Bibliothek installieren (Library Manager → M5StamPLC) – initialisiert das Display korrekt
+- Alternativ M5Unified nutzen (oft nur mit korrekter Board-Auswahl)
+- Board **M5Stamp PLC** ausgewählt? (nicht nur „ESP32 Dev Module“)
+- Seriellen Monitor öffnen (115200 Baud): Steht dort „Display: M5Unified aktiv“ oder „Display: aus“?
 
 ## Lizenz
 

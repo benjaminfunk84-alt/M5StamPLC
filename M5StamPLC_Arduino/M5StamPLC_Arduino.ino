@@ -8,6 +8,17 @@
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 
+// Display: M5StamPLC-Bibliothek (board-spezifisch, initialisiert Display korrekt)
+#if __has_include(<M5StamPLC.h>)
+  #include <M5StamPLC.h>
+  #define USE_DISPLAY 1
+  #define DISPLAY M5StamPLC.Display
+#else
+  #include <M5Unified.h>
+  #define USE_DISPLAY 1
+  #define DISPLAY M5.Display
+#endif
+
 // ============================================
 // PIN CONFIGURATION (M5StampPLC)
 // ============================================
@@ -49,6 +60,10 @@ bool systemError = false;
 unsigned long lastStatusSendMs = 0;
 unsigned long lastInaReadMs = 0;
 int beepFlag = 0;
+
+#if USE_DISPLAY
+unsigned long lastDisplayUpdateMs = 0;
+#endif
 
 // RFID-Speicher (max 20 Tags im RAM, nicht persistent)
 String rfidTagList[20];
@@ -194,12 +209,39 @@ String readLineFromSerial(HardwareSerial &ser, String &buf, size_t maxLen = 256)
 // ============================================
 
 void setup() {
+  // Display: M5StamPLC.begin() oder M5.begin() – ZUERST, vor allem anderen
+  #if USE_DISPLAY
+  #if __has_include(<M5StamPLC.h>)
+  M5StamPLC.begin();
+  #else
+  {
+    auto cfg = M5.config();
+    cfg.clear_display = true;
+    M5.begin(cfg);
+  }
+  #endif
+  DISPLAY.setRotation(1);
+  DISPLAY.setTextSize(2);
+  DISPLAY.fillScreen(TFT_BLACK);
+  DISPLAY.setTextColor(TFT_WHITE);
+  DISPLAY.setCursor(0, 0);
+  DISPLAY.println("M5StampPLC");
+  DISPLAY.println("RFID Controller");
+  DISPLAY.println("Starting...");
+  delay(100);
+  #endif
+
   // Serial Debug (GPIO1/GPIO3, 115200)
   Serial.begin(115200);
   delay(500);
   Serial.println("\n\n=== M5StampPLC RFID Controller ===");
+  #if __has_include(<M5StamPLC.h>)
+  Serial.println("Display: M5StamPLC aktiv");
+  #else
+  Serial.println("Display: M5Unified aktiv");
+  #endif
   
-  // I2C (SDA=GPIO21, SCL=GPIO22)
+  // I2C (SDA=GPIO21, SCL=GPIO22) – bei vollem M5StamPLC-Board evtl. 13/15
   Wire.begin(21, 22);
   Wire.setClock(400000);  // 400 kHz
   Serial.println("I2C initialized");
@@ -223,6 +265,10 @@ void setup() {
     digitalWrite(RELAY1_PIN + i, LOW);  // All off
   }
   Serial.println("Relays initialized (all OFF)");
+  
+  #if USE_DISPLAY
+  DISPLAY.fillScreen(TFT_BLACK);
+  #endif
   
   Serial.println("Setup complete");
 }
@@ -300,6 +346,26 @@ void loop() {
     // Reset transient flags
     beepFlag = 0;
   }
+  
+  // --- 6) Display aktualisieren (ca. alle 500 ms) ---
+  #if USE_DISPLAY
+  if (now - lastDisplayUpdateMs >= 500) {
+    lastDisplayUpdateMs = now;
+    DISPLAY.fillScreen(TFT_BLACK);
+    DISPLAY.setTextSize(2);
+    DISPLAY.setTextColor(TFT_WHITE);
+    DISPLAY.setCursor(0, 0);
+    DISPLAY.printf("RFID: %s\n", lastTag.c_str());
+    DISPLAY.printf("U: %.2f V  I: %.3f A\n", cachedVoltage, cachedCurrent);
+    DISPLAY.print("R: ");
+    for (int i = 0; i < 4; i++) DISPLAY.print(relayState[i] ? "1" : "0");
+    DISPLAY.printf("  Tags:%d\n", rfidTagCount);
+  }
+  #endif
+  
+  #if USE_DISPLAY
+  M5.update();  // M5-Geraete-Update (Buttons, Display etc.)
+  #endif
   
   delay(10);
 }
