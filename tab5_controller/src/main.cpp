@@ -155,7 +155,7 @@ static void processJsonLine(const char* buf) {
   gConnected = true;
   gLastRxMs  = millis();
 
-  // Scan-Modus: neuen Tag automatisch hinzufügen
+  // Scan-Modus: neuen Tag automatisch hinzufügen (nur wenn aktiv)
   if (gScanMode && millis() < gScanEndMs && gCurTag.length() > 0 && gCurTag != "-") {
     bool found = false;
     for (int i = 0; i < (int)gTagCount; i++) { if (gTagList[i] == gCurTag) { found = true; break; } }
@@ -168,9 +168,10 @@ static void processJsonLine(const char* buf) {
     }
   }
 
-  if (relayChanged)                               gDirtyRelay  = true;
-  if (voltChanged || tagChanged || !wasConnected) gDirtyStatus = true;
-  if (tagChanged)                                 gDirtyRfid   = true;
+  if (relayChanged)                                        gDirtyRelay  = true;
+  if (voltChanged || !wasConnected)                        gDirtyStatus = true;
+  // Status-Leiste und RFID-Panel nur im Scan-Modus bei Tag-Wechsel aktualisieren
+  if (tagChanged && gScanMode)                             gDirtyStatus = true;
 }
 
 static void readStatusUdp() {
@@ -229,12 +230,17 @@ static void drawStatusBar() {
   snprintf(buf, sizeof(buf), "%.3f A", gAmp);
   sprStatus.print(buf);
 
-  // Aktueller Tag
-  sprStatus.setCursor(680, 18);
-  sprStatus.setTextColor(C_DIMGREY, C_PANEL);
-  sprStatus.print("TAG: ");
-  sprStatus.setTextColor(gCurTag != "-" ? C_CYAN : C_GREY, C_PANEL);
-  sprStatus.print(gCurTag.length() > 10 ? gCurTag.substring(0, 10) : gCurTag);
+  // RFID-Status (nur im Scan-Modus aktuellen Tag zeigen)
+  sprStatus.setCursor(650, 18);
+  if (gScanMode) {
+    sprStatus.setTextColor(C_ORANGE, C_PANEL);
+    sprStatus.print("SCAN: ");
+    sprStatus.setTextColor(gCurTag != "-" ? C_WHITE : C_DIMGREY, C_PANEL);
+    sprStatus.print(gCurTag != "-" ? gCurTag : "warte...");
+  } else {
+    sprStatus.setTextColor(C_DIMGREY, C_PANEL);
+    sprStatus.print("RFID: Scan-Taste druecken");
+  }
 
   sprStatus.pushSprite(&M5.Display, 0, 0);
   gDirtyStatus = false;
@@ -346,20 +352,27 @@ static void drawRfidPanel() {
 
   // ---- Tag-Liste ----
   const int SCAN_BTN_H = 58;
-  const int TAG_H      = 72;
+  const int TAG_H      = 90;   // größer für besser lesbare Beschriftung
+  const int TAG_GAP    = 6;
   const int TAG_X      = 12;
   const int TAG_W      = ow - 24;
-  const int LIST_Y     = 34 + bannerH + 4;  // Start der Liste
+  const int LIST_Y     = 34 + bannerH + 4;
   int listH    = ph - LIST_Y - SCAN_BTN_H - 16;
-  int maxVis   = max(1, listH / (TAG_H + 8));
+  int maxVis   = max(1, listH / (TAG_H + TAG_GAP));
 
   // Scroll-Korrektur
   if (gTagScroll > (int)gTagCount - maxVis) gTagScroll = max(0, (int)gTagCount - maxVis);
 
   int visEnd = min((int)gTagCount, gTagScroll + maxVis);
 
+  // Button-Dimensionen (Schreiben größer, mehr Abstand zu Löschen)
+  const int dBtnW = 48, dBtnH = 40;  // Delete: quadratisch
+  const int wBtnW = 120, wBtnH = 40; // Write: breiter
+  const int btnGap = 20;             // Abstand zwischen den Buttons
+  const int dBtnRightMargin = 8;
+
   for (int i = gTagScroll; i < visEnd; i++) {
-    int cy = LIST_Y + (i - gTagScroll) * (TAG_H + 8);
+    int cy = LIST_Y + (i - gTagScroll) * (TAG_H + TAG_GAP);
     bool isWriteTarget = (gWriteMode && gWriteIdx == i);
     uint32_t bg  = isWriteTarget ? 0x0D2B20 : C_CARD;
     uint32_t brd = isWriteTarget ? C_GREEN  : C_DIVIDER;
@@ -367,43 +380,49 @@ static void drawRfidPanel() {
     sprRfid.fillRoundRect(TAG_X, cy, TAG_W, TAG_H, 8, bg);
     sprRfid.drawRoundRect(TAG_X, cy, TAG_W, TAG_H, 8, brd);
 
-    // Index-Label
-    sprRfid.setTextSize(1);
+    // Button-Positionen (von rechts berechnet)
+    int dBtnX = TAG_W - dBtnW - dBtnRightMargin;
+    int wBtnX = dBtnX - btnGap - wBtnW;
+    int btnY  = cy + (TAG_H - wBtnH) / 2;
+
+    // Index-Label (größer)
+    sprRfid.setTextSize(2);
     sprRfid.setTextColor(C_GREY, bg);
-    sprRfid.setCursor(TAG_X + 12, cy + 8);
+    sprRfid.setCursor(TAG_X + 14, cy + 10);
     sprRfid.printf("TAG %02d", i + 1);
 
-    // UID
-    sprRfid.setTextSize(2);
-    sprRfid.setTextColor(C_WHITE, bg);
-    sprRfid.setCursor(TAG_X + 12, cy + 26);
-    sprRfid.print(gTagList[i]);
-
-    // Write-Button (cyan)
-    int wBtnW = 80, wBtnH = 34;
-    int wBtnX = TAG_W - wBtnW - wBtnH - 14;  // links vom Del-Button
-    int wBtnY = cy + (TAG_H - wBtnH) / 2;
-    uint32_t wCol = isWriteTarget ? C_GREEN : C_CYAN;
-    sprRfid.fillRoundRect(TAG_X + wBtnX, wBtnY, wBtnW, wBtnH, 6, wCol);
-    sprRfid.setTextColor(C_BLACK, wCol);
+    // Seriennummer-Label + UID (groß)
     sprRfid.setTextSize(1);
-    sprRfid.setCursor(TAG_X + wBtnX + 10, wBtnY + 11);
-    sprRfid.print(isWriteTarget ? "ABBRECH" : "SCHREIB");
+    sprRfid.setTextColor(C_DIMGREY, bg);
+    sprRfid.setCursor(TAG_X + 14, cy + 44);
+    sprRfid.print("SN:");
+    sprRfid.setTextSize(2);
+    sprRfid.setTextColor(C_CYAN, bg);
+    sprRfid.setCursor(TAG_X + 42, cy + 58);
+    // Zeilenumbruch falls zu lang (>14 Zeichen)
+    String uid = gTagList[i];
+    sprRfid.print(uid.length() > 14 ? uid.substring(0, 14) : uid);
 
-    // Del-Button (rot)
-    int dBtnW = wBtnH, dBtnH = wBtnH;
-    int dBtnX = TAG_W - dBtnW - 2;
-    int dBtnY = wBtnY;
-    sprRfid.fillRoundRect(TAG_X + dBtnX, dBtnY, dBtnW, dBtnH, 6, (uint32_t)C_RED);
+    // Write-Button (cyan, größer)
+    uint32_t wCol = isWriteTarget ? C_GREEN : C_CYAN;
+    sprRfid.fillRoundRect(TAG_X + wBtnX, btnY, wBtnW, wBtnH, 8, wCol);
+    sprRfid.setTextColor(C_BLACK, wCol);
+    sprRfid.setTextSize(2);
+    int wTxtX = TAG_X + wBtnX + (wBtnW - (isWriteTarget ? 9 : 8) * 12) / 2;
+    sprRfid.setCursor(wTxtX, btnY + 12);
+    sprRfid.print(isWriteTarget ? "ABBRUCH" : "SCHREIBEN");
+
+    // Delete-Button (rot, quadratisch, mit Abstand)
+    sprRfid.fillRoundRect(TAG_X + dBtnX, btnY, dBtnW, dBtnH, 8, (uint32_t)C_RED);
     sprRfid.setTextColor(C_WHITE, C_RED);
     sprRfid.setTextSize(2);
-    sprRfid.setCursor(TAG_X + dBtnX + 10, dBtnY + 8);
+    sprRfid.setCursor(TAG_X + dBtnX + 16, btnY + 12);
     sprRfid.print("X");
 
     // Hit-Areas in Display-Koordinaten
-    rcTagCard[i] = {px + TAG_X,         S_H + cy, TAG_W - wBtnW - dBtnW - 20, TAG_H};
-    rcTagWrt[i]  = {px + TAG_X + wBtnX, S_H + wBtnY, wBtnW, wBtnH};
-    rcTagDel[i]  = {px + TAG_X + dBtnX, S_H + dBtnY, dBtnW, dBtnH};
+    rcTagCard[i] = {px + TAG_X,          S_H + cy,    wBtnX - 8,  TAG_H};
+    rcTagWrt[i]  = {px + TAG_X + wBtnX,  S_H + btnY,  wBtnW, wBtnH};
+    rcTagDel[i]  = {px + TAG_X + dBtnX,  S_H + btnY,  dBtnW, dBtnH};
   }
 
   // Keine Tags
