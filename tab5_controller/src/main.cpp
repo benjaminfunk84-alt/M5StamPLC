@@ -532,8 +532,12 @@ void setup() {
   Serial.printf("Display: %d x %d\n", DW, DH);
 
   // Sprites erstellen (nutzen PSRAM auf Tab5)
+  // Große Sprites (>300KB) müssen aus PSRAM allokiert werden (Tab5 hat 32MB PSRAM)
+  // Free heap ~394KB reicht nicht für Relay(590KB) + Rfid(1MB)
   sprStatus.createSprite(DW, S_H);
+  sprRelay.setPsram(true);
   sprRelay.createSprite(L_W, DH - S_H);
+  sprRfid.setPsram(true);
   sprRfid.createSprite(DW - L_W - 1, DH - S_H);
 
   // Splash screen
