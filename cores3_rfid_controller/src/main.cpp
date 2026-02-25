@@ -179,10 +179,18 @@ void setRelay(uint8_t idx, bool state) {
   relayState[idx] = state;
   uint8_t val = 0;
   for (int i = 0; i < 4; i++) if (relayState[i]) val |= (1 << i);
+  // #region agent log H3
+  Serial.printf("[DBG] setRelay idx=%d state=%d val=0x%02X relayPresent=%d\n",
+                idx, (int)state, val, (int)relayPresent);
+  // #endregion
+  uint8_t txErr = 255;
   i2cBus->beginTransmission(RELAY_I2C_ADDR);
   i2cBus->write(RELAY_REG);
   i2cBus->write(val);
-  i2cBus->endTransmission();
+  txErr = i2cBus->endTransmission();
+  // #region agent log H3
+  Serial.printf("[DBG] setRelay I2C write err=%d\n", txErr);
+  // #endregion
 }
 
 void readRelayState() {
@@ -191,6 +199,10 @@ void readRelayState() {
   if (i2cBus->endTransmission(false) != 0) return;
   if (i2cBus->requestFrom((uint16_t)RELAY_I2C_ADDR, (uint8_t)1, (uint8_t)1) != 1) return;
   uint8_t val = i2cBus->read();
+  // #region agent log H1
+  Serial.printf("[DBG] readRelayState raw=0x%02X -> R:%d%d%d%d\n",
+                val, (val>>0)&1, (val>>1)&1, (val>>2)&1, (val>>3)&1);
+  // #endregion
   for (int i = 0; i < 4; i++) relayState[i] = (val & (1 << i)) != 0;
 }
 
@@ -213,6 +225,9 @@ void receiveCommandsUdp() {
   char buf[UDP_PAYLOAD_MAX + 1];
   int r = udpCmd.read(buf, UDP_PAYLOAD_MAX);
   buf[r] = '\0';
+  // #region agent log H2
+  Serial.printf("[DBG] UDP CMD empfangen (%d bytes): %s\n", r, buf);
+  // #endregion
   handleCommandFromTab(String(buf));
 }
 
@@ -234,6 +249,15 @@ void sendStatusUdp() {
   size_t n = serializeJson(doc, out, sizeof(out));
   if (n == 0 || n >= UDP_PAYLOAD_MAX) return;
 
+  // #region agent log H2 – Status alle 5s loggen
+  static uint32_t lastStatusLog = 0;
+  if (millis() - lastStatusLog > 5000) {
+    lastStatusLog = millis();
+    Serial.printf("[DBG] STATUS: R=%d%d%d%d  U=%.2f  json=%s\n",
+                  relayState[0], relayState[1], relayState[2], relayState[3],
+                  cachedVoltage, out);
+  }
+  // #endregion
   IPAddress bcast(192, 168, 4, 255);
   udpStatus.beginPacket(bcast, UDP_STATUS_PORT);
   udpStatus.write((const uint8_t*)out, n);
@@ -480,13 +504,11 @@ void loop() {
     lastTag = "-";
   }
 
-  // I2C nur in einem Block mit Pausen – reduziert Error 263 (Bus-Konflikt mit Display)
+  // I2C: nur INA226 lesen; readRelayState() entfernt da raw=0xFF unreliable
   if (now - lastInaReadMs >= INA_READ_INTERVAL_MS) {
     lastInaReadMs = now;
-    lastRelayReadMs = now;
     delay(I2C_BUS_PAUSE_MS);
     readINA226();
-    if (relayPresent) readRelayState();
     delay(I2C_BUS_PAUSE_MS);
   }
 

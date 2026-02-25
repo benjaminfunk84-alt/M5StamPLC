@@ -99,19 +99,17 @@ static const size_t PMAX            = 512;
 #define SDIO2_D3   GPIO_NUM_8
 #define SDIO2_RST  GPIO_NUM_15
 
-static WiFiUDP udpRx;
-static WiFiUDP udpTx;
+static WiFiUDP udpRx;   // Status empfangen + Commands senden (initialisierter Socket)
 
 static void sendCmd(const char* json) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.print("WiFi n/a, TX dropped: "); Serial.println(json);
-    return;
-  }
-  static const IPAddress cores3IP(192, 168, 4, 1);
-  udpTx.beginPacket(cores3IP, UDP_CMD_PORT);
-  udpTx.print(json);
-  udpTx.endPacket();
-  Serial.print("UDP TX> "); Serial.println(json);
+  // udpRx (mit begin() initialisiert) für Broadcast-Versand verwenden
+  static const IPAddress broadcastIP(192, 168, 4, 255);
+  int rb = udpRx.beginPacket(broadcastIP, UDP_CMD_PORT);
+  udpRx.print(json);
+  int re = udpRx.endPacket();
+  // #region agent log H2
+  Serial.printf("[DBG] sendCmd begin=%d end=%d json=%s\n", rb, re, json);
+  // #endregion
 }
 
 // Forward decl
@@ -219,10 +217,7 @@ static void drawStatusBar() {
   sprStatus.setTextColor(C_GREY, C_PANEL);
   sprStatus.setTextSize(1);
   sprStatus.setCursor(125, 24);
-  bool wifiOk = (WiFi.status() == WL_CONNECTED);
-  if (alive)        sprStatus.print("WiFi verbunden");
-  else if (wifiOk)  sprStatus.print("warten auf Daten...");
-  else              sprStatus.print("WiFi: verbinde...");
+  sprStatus.print(alive ? "WiFi verbunden" : "WiFi: verbinde...");
 
   // Spannung / Strom
   char buf[32];
