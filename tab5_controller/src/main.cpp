@@ -1,8 +1,10 @@
 // M5Tab5 Controller – Touch-UI für Relay-Steuerung und RFID-Verwaltung
-// Kommunikation mit CoreS3: UART2 (M5-Bus G38=RX, G37=TX)
+// Kommunikation mit CoreS3: WiFi (C6 via SDIO2) → UDP
 
 #include <Arduino.h>
 #include <M5Unified.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
 #include <ArduinoJson.h>
 
 // ============================================
@@ -79,18 +81,37 @@ Rect rcScanBtn;
 Rect rcScrollUp, rcScrollDown;
 
 // ============================================
-// UART-Kommunikation (M5-Bus: G38=RX, G37=TX)
+// WiFi Station + UDP (Tab5 C6 via SDIO2 → CoreS3 SoftAP)
+// SDIO2-Pins: P4 GPIO8-13 + Reset GPIO15
 // ============================================
-static const int  UART_RX  = 38;
-static const int  UART_TX  = 37;
-static const int  UART_BAUD = 115200;
-static const size_t PMAX   = 512;
+static const char*  AP_SSID         = "CoreS3-AP";
+static const char*  AP_PASS         = "cores3pass";
+static const int    UDP_STATUS_PORT = 4211;   // CoreS3 sendet Status
+static const int    UDP_CMD_PORT    = 4210;   // CoreS3 empfängt Commands
+static const size_t PMAX            = 512;
 
-static HardwareSerial bridgeSerial(2);
+// Tab5-spezifische SDIO2-Pins (P4 → C6)
+#define SDIO2_CLK  GPIO_NUM_12
+#define SDIO2_CMD  GPIO_NUM_13
+#define SDIO2_D0   GPIO_NUM_11
+#define SDIO2_D1   GPIO_NUM_10
+#define SDIO2_D2   GPIO_NUM_9
+#define SDIO2_D3   GPIO_NUM_8
+#define SDIO2_RST  GPIO_NUM_15
+
+static WiFiUDP udpRx;
+static WiFiUDP udpTx;
 
 static void sendCmd(const char* json) {
-  bridgeSerial.println(json);
-  Serial.print("TX> "); Serial.println(json);
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("WiFi n/a, TX dropped: "); Serial.println(json);
+    return;
+  }
+  static const IPAddress cores3IP(192, 168, 4, 1);
+  udpTx.beginPacket(cores3IP, UDP_CMD_PORT);
+  udpTx.print(json);
+  udpTx.endPacket();
+  Serial.print("UDP TX> "); Serial.println(json);
 }
 
 // Forward decl
@@ -157,26 +178,23 @@ static void processJsonLine(const char* buf) {
   if (tagChanged)                                 gDirtyRfid   = true;
 }
 
-static void readBridgeSerial() {
-  static char rxBuf[PMAX + 1];
-  static int  rxIdx = 0;
-  while (bridgeSerial.available()) {
-    char c = (char)bridgeSerial.read();
-    if (c == '\n' || c == '\r') {
-      if (rxIdx > 0) {
-        rxBuf[rxIdx] = '\0';
-        processJsonLine(rxBuf);
-        rxIdx = 0;
-      }
-    } else if (rxIdx < (int)PMAX) {
-      rxBuf[rxIdx++] = c;
-    }
-  }
+static void readStatusUdp() {
+  int n = udpRx.parsePacket();
+  if (n <= 0 || n > (int)PMAX) return;
+  char buf[PMAX + 1];
+  int r = udpRx.read(buf, PMAX);
+  buf[r] = '\0';
+  processJsonLine(buf);
 }
 
-static void setupBridge() {
-  bridgeSerial.begin(UART_BAUD, SERIAL_8N1, UART_RX, UART_TX);
-  Serial.printf("UART Bridge: RX=%d TX=%d @%d\n", UART_RX, UART_TX, UART_BAUD);
+static void setupWiFi() {
+  // SDIO2-Pins MÜSSEN vor WiFi.mode() gesetzt werden (Tab5-spezifisch!)
+  WiFi.setPins(SDIO2_CLK, SDIO2_CMD, SDIO2_D0, SDIO2_D1, SDIO2_D2, SDIO2_D3, SDIO2_RST);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(AP_SSID, AP_PASS);
+  Serial.printf("WiFi: Verbinde mit %s ...\n", AP_SSID);
+  udpRx.begin(UDP_STATUS_PORT);
+  Serial.println("UDP RX bereit (Port 4211)");
 }
 
 // ============================================
@@ -201,7 +219,10 @@ static void drawStatusBar() {
   sprStatus.setTextColor(C_GREY, C_PANEL);
   sprStatus.setTextSize(1);
   sprStatus.setCursor(125, 24);
-  sprStatus.print(alive ? "UART verbunden" : "warten auf Signal...");
+  bool wifiOk = (WiFi.status() == WL_CONNECTED);
+  if (alive)        sprStatus.print("WiFi verbunden");
+  else if (wifiOk)  sprStatus.print("warten auf Daten...");
+  else              sprStatus.print("WiFi: verbinde...");
 
   // Spannung / Strom
   char buf[32];
@@ -544,7 +565,7 @@ void setup() {
   M5.Display.setCursor(DW / 2 - 240, DH / 2 - 20);
   M5.Display.print("Verbinde mit CoreS3...");
 
-  setupBridge();
+  setupWiFi();
   drawAll(true);
   Serial.println("Setup complete");
 }
@@ -556,8 +577,8 @@ void loop() {
   M5.update();
   unsigned long now = millis();
 
-  // UART Bridge lesen
-  readBridgeSerial();
+  // UDP Status von CoreS3 lesen
+  readStatusUdp();
 
   // Touch-Eingabe
   if (M5.Touch.getCount() > 0) {
