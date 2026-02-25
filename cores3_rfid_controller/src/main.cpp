@@ -1,10 +1,10 @@
-// M5CoreS3 RFID-Controller – WiFi SoftAP + UDP (kein externer Router)
+// M5CoreS3 RFID-Controller – ESP-NOW Broadcast (direkt, kein WLAN)
 // Stack: CoreS3, 4Relay, INA226 (I2C), RFID2/WS1850S (I2C). Partner: M5Tab5.
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <WiFiUdp.h>
+#include <esp_now.h>
 #include <M5Unified.h>
 #include <MFRC522v2.h>
 #include <MFRC522DriverI2C.h>
@@ -30,21 +30,16 @@ bool rfid2Present  = false;
 // ============================================
 // CONSTANTS
 // ============================================
-const unsigned long STATUS_SEND_INTERVAL_MS = 500;   // UDP-Status alle 500ms
+const unsigned long STATUS_SEND_INTERVAL_MS = 200;
 const unsigned long INA_READ_INTERVAL_MS   = 4000;
 const unsigned long RELAY_READ_INTERVAL_MS  = 4000;
 const unsigned long I2C_BUS_PAUSE_MS       = 150;
 const unsigned long RFID_TIMEOUT_MS        = 5000;
-const size_t        UDP_PAYLOAD_MAX        = 512;
+const size_t        ESPNOW_PAYLOAD_MAX     = 250;
 
-// WiFi SoftAP Konfiguration
-static const char*  AP_SSID         = "CoreS3-AP";
-static const char*  AP_PASS         = "cores3pass";
-static const int    UDP_STATUS_PORT = 4211;  // CoreS3 sendet Status
-static const int    UDP_CMD_PORT    = 4210;  // CoreS3 empfängt Commands
-
-WiFiUDP udpStatus;
-WiFiUDP udpCmd;
+// Tab5-MAC (ESP32-C6): 0 = Broadcast
+uint8_t tab5Mac[6] = {0, 0, 0, 0, 0, 0};
+bool useBroadcast = true;
 
 void handleCommandFromTab(const String &jsonStr);
 
@@ -196,28 +191,31 @@ void readRelayState() {
 }
 
 // ============================================
-// WiFi SoftAP + UDP
+// ESP-NOW
 // ============================================
-void setupWiFiAP() {
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(AP_SSID, AP_PASS);
-  delay(500);
-  Serial.printf("SoftAP: %s  IP: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
-  udpStatus.begin(UDP_STATUS_PORT);
-  udpCmd.begin(UDP_CMD_PORT);
-  Serial.println("UDP OK (Status:4211 Cmd:4210)");
-}
-
-void receiveCommandsUdp() {
-  int n = udpCmd.parsePacket();
-  if (n <= 0 || n > (int)UDP_PAYLOAD_MAX) return;
-  char buf[UDP_PAYLOAD_MAX + 1];
-  int r = udpCmd.read(buf, UDP_PAYLOAD_MAX);
-  buf[r] = '\0';
+void onEspNowRecv(const esp_now_recv_info_t* /*info*/, const uint8_t* data, int len) {
+  if (len <= 0 || len > (int)ESPNOW_PAYLOAD_MAX) return;
+  char buf[ESPNOW_PAYLOAD_MAX + 1];
+  memcpy(buf, data, (size_t)len);
+  buf[len] = '\0';
   handleCommandFromTab(String(buf));
 }
 
-void sendStatusUdp() {
+void setupEspNow() {
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+  esp_now_register_recv_cb(onEspNowRecv);
+  Serial.println("ESP-NOW OK");
+  Serial.print("CoreS3 MAC: ");
+  Serial.println(WiFi.macAddress());
+}
+
+void sendStatusEspNow() {
   JsonDocument doc;
   doc["u"] = cachedVoltage;
   doc["i"] = cachedCurrent;
@@ -231,15 +229,21 @@ void sendStatusUdp() {
     relayArray.add(relayState[i] ? 1 : 0);
   doc["beep"] = beepFlag;
 
-  char out[UDP_PAYLOAD_MAX];
-  size_t n = serializeJson(doc, out, sizeof(out));
-  if (n == 0 || n >= UDP_PAYLOAD_MAX) return;
+  String out;
+  serializeJson(doc, out);
+  if (out.length() >= ESPNOW_PAYLOAD_MAX) return;
 
-  // Broadcast an alle im SoftAP-Netz (192.168.4.255)
-  IPAddress bcast(192, 168, 4, 255);
-  udpStatus.beginPacket(bcast, UDP_STATUS_PORT);
-  udpStatus.write((const uint8_t*)out, n);
-  udpStatus.endPacket();
+  uint8_t raw[ESPNOW_PAYLOAD_MAX];
+  size_t n = out.length();
+  memcpy(raw, out.c_str(), n);
+
+  if (useBroadcast) {
+    uint8_t broadcast[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    esp_err_t r = esp_now_send(broadcast, raw, n);
+    (void)r;
+  } else {
+    esp_now_send(tab5Mac, raw, n);
+  }
 }
 
 // ============================================
@@ -437,7 +441,7 @@ void setup() {
     Serial.println("4Relay OK");
   }
 
-  setupWiFiAP();
+  setupEspNow();
 
   M5.Display.fillScreen(TFT_BLACK);
   Serial.println("Setup complete");
@@ -492,11 +496,9 @@ void loop() {
     delay(I2C_BUS_PAUSE_MS);
   }
 
-  receiveCommandsUdp();
-
   if (now - lastStatusSendMs >= STATUS_SEND_INTERVAL_MS) {
     lastStatusSendMs = now;
-    sendStatusUdp();
+    sendStatusEspNow();
     beepFlag = 0;
   }
 
@@ -518,7 +520,7 @@ void loop() {
     M5.Display.print("R: ");
     for (int i = 0; i < 4; i++) M5.Display.print(relayState[i] ? "1" : "0");
     M5.Display.printf("  Tags:%d\n", rfidTagCount);
-    M5.Display.println("(WiFi AP)");
+    M5.Display.println("(ESP-NOW)");
   }
 
   M5.update();
