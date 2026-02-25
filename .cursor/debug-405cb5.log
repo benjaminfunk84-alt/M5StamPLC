@@ -1,0 +1,148 @@
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932164, "location": "CoreS3:serial", "message": ": No", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932164, "location": "CoreS3:serial", "message": "BT Low Energy     : Yes", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932164, "location": "CoreS3:serial", "message": "IEEE 802.15.4     : No", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932165, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932165, "location": "CoreS3:serial", "message": "INTERNAL Memory Info:", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932165, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932165, "location": "CoreS3:serial", "message": "Total Size        :   349568 B ( 341.4 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932165, "location": "CoreS3:serial", "message": "Free Bytes        :   311352 B ( 304.1 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932166, "location": "CoreS3:serial", "message": "Allocated Bytes   :    33040 B (  32.3 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932166, "location": "CoreS3:serial", "message": "Minimum Free Bytes:   307432 B ( 300.2 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932166, "location": "CoreS3:serial", "message": "Largest Free Block:   245748 B ( 240.0 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932166, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932166, "location": "CoreS3:serial", "message": "SPIRAM Memory Info:", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932166, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932167, "location": "CoreS3:serial", "message": "Total Size        :  8388608 B (8192.0 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932167, "location": "CoreS3:serial", "message": "Free Bytes        :  8386296 B (8189.7 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932167, "location": "CoreS3:serial", "message": "Allocated Bytes   :        0 B (   0.0 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932167, "location": "CoreS3:serial", "message": "Minimum Free Bytes:  8386296 B (8189.7 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932167, "location": "CoreS3:serial", "message": "Largest Free Block:  8257524 B (8064.0 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932167, "location": "CoreS3:serial", "message": "Bus Mode          : QSPI", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932168, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932168, "location": "CoreS3:serial", "message": "Flash Info:", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932168, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932168, "location": "CoreS3:serial", "message": "Chip Size         : 16777216 B (16 MB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932168, "location": "CoreS3:serial", "message": "Block Size        :    65536 B (  64.0 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932168, "location": "CoreS3:serial", "message": "Sector Size       :     4096 B (   4.0 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932169, "location": "CoreS3:serial", "message": "Page Size         :      256 B (   0.2 KB)", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932169, "location": "CoreS3:serial", "message": "Bus Speed         : 80 MHz", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932169, "location": "CoreS3:serial", "message": "Bus Mode          : QIO", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932169, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932169, "location": "CoreS3:serial", "message": "Partitions Info:", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932169, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932170, "location": "CoreS3:serial", "message": "nvs : addr: 0x00009000, size:    20.0 KB, type: DATA, subtype: NVS", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932170, "location": "CoreS3:serial", "message": "otadata : addr: 0x0000E000, size:     8.0 KB, type: DATA, subtype: OTA", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932170, "location": "CoreS3:serial", "message": "app0 : addr: 0x00010000, size:  6400.0 KB, type:  APP, subtype: OTA_0", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932170, "location": "CoreS3:serial", "message": "app1 : addr: 0x00650000, size:  6400.0 KB, type:  APP, subtype: OTA_1", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932171, "location": "CoreS3:serial", "message": "spiffs : addr: 0x00C90000, size:  3456.0 KB, type: DATA, subtype: SPIFFS", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932171, "location": "CoreS3:serial", "message": "coredump : addr: 0x00FF0000, size:    64.0 KB, type: DATA, subtype: COREDUMP", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932171, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932171, "location": "CoreS3:serial", "message": "Software Info:", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932172, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "Compile Date/Time : Feb 25 2026 11:35:57", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "ESP-IDF Version   : v5.4.2-25-g858a988d6e", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "Arduino Version   : 3.2.1", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "Board Info:", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "Arduino Board     : M5Stack CoreS3", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "Arduino Variant   : m5stack_cores3", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932173, "location": "CoreS3:serial", "message": "Core Debug Level  : 4", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932174, "location": "CoreS3:serial", "message": "Arduino Runs Core : 1", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932174, "location": "CoreS3:serial", "message": "Arduino Events on : 1", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932174, "location": "CoreS3:serial", "message": "Arduino USB Mode  : 1", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932174, "location": "CoreS3:serial", "message": "CDC On Boot       : 1", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932174, "location": "CoreS3:serial", "message": "============ Before Setup End ============", "elapsed_s": 0.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932275, "location": "CoreS3:serial", "message": "[ 13514][I][esp32-hal-periman.c:141] perimanSetPinBus(): Pin 19 already has type USB_DM (45) with bus 0x3fc9d918", "elapsed_s": 0.1}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932276, "location": "CoreS3:serial", "message": "[ 13514][I][esp32-hal-periman.c:141] perimanSetPinBus(): Pin 20 already has type USB_DP (46) with bus 0x3fc9d918", "elapsed_s": 0.1}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932475, "location": "CoreS3:serial", "message": "=== M5CoreS3 RFID Controller (ESP-NOW) ===", "elapsed_s": 0.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932476, "location": "CoreS3:serial", "message": "[ 13715][I][M5GFX.cpp:634] init_impl(): [M5GFX] [Autodetect] load from NVS : board:10", "elapsed_s": 0.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932477, "location": "CoreS3:serial", "message": "[ 13716][I][esp32-hal-i2c-ng.c:105] i2cInit(): Initializing I2C Master: num=1 sda=12 scl=11 freq=100000", "elapsed_s": 0.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932482, "location": "CoreS3:serial", "message": "[ 13721][D][M5GFX.cpp:596] _read_panel_id(): [M5GFX] [Autodetect] read cmd:04 = 1f0000e3", "elapsed_s": 0.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932483, "location": "CoreS3:serial", "message": "[ 13722][I][M5GFX.cpp:1311] autodetect(): [M5GFX] [Autodetect] board_M5StackCoreS3", "elapsed_s": 0.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932637, "location": "CoreS3:serial", "message": "[ 13876][I][esp32-hal-i2c-ng.c:105] i2cInit(): Initializing I2C Master: num=1 sda=12 scl=11 freq=100000", "elapsed_s": 0.5}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932637, "location": "CoreS3:serial", "message": "auto detect board:10", "elapsed_s": 0.5}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932638, "location": "CoreS3:serial", "message": "[ 13878][I][esp32-hal-i2c-ng.c:105] i2cInit(): Initializing I2C Master: num=1 sda=12 scl=11 freq=100000", "elapsed_s": 0.5}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932642, "location": "CoreS3:serial", "message": "[ 13882][W][Power_Class.cpp:590] setExtOutput(): [Power] setExtPower(true) is canceled.", "elapsed_s": 0.5}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932675, "location": "CoreS3:serial", "message": "[ 13915][I][esp32-hal-i2c-ng.c:105] i2cInit(): Initializing I2C Master: num=1 sda=12 scl=11 freq=100000", "elapsed_s": 0.5}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030932678, "location": "CoreS3:serial", "message": "[ 13917][I][esp32-hal-i2c-ng.c:105] i2cInit(): Initializing I2C Master: num=1 sda=12 scl=11 freq=100000", "elapsed_s": 0.5}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933142, "location": "CoreS3:serial", "message": "[ 14382][W][Wire.cpp:296] begin(): Bus already started in Master Mode.", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933142, "location": "CoreS3:serial", "message": "I2C Wire1 SDA=21 SCL=22", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933142, "location": "CoreS3:serial", "message": "I2C-Scan 0x08..0x77:", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933146, "location": "CoreS3:serial", "message": "0x21", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933146, "location": "CoreS3:serial", "message": "0x23", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933147, "location": "CoreS3:serial", "message": "0x26", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933147, "location": "CoreS3:serial", "message": "0x28", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933149, "location": "CoreS3:serial", "message": "0x34", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933149, "location": "CoreS3:serial", "message": "0x36", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933149, "location": "CoreS3:serial", "message": "0x38", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933151, "location": "CoreS3:serial", "message": "0x40", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933151, "location": "CoreS3:serial", "message": "0x41", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933153, "location": "CoreS3:serial", "message": "0x51", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933154, "location": "CoreS3:serial", "message": "0x54", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933154, "location": "CoreS3:serial", "message": "0x58", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933157, "location": "CoreS3:serial", "message": "0x69", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933159, "location": "CoreS3:serial", "message": "INA226 gefunden: 0x41", "elapsed_s": 1.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933463, "location": "CoreS3:serial", "message": "INA226 0x41: 12.23 V, 0.000 A", "elapsed_s": 1.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933464, "location": "CoreS3:serial", "message": "INA226 0x40: 0.96 V, 0.211 A", "elapsed_s": 1.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933464, "location": "CoreS3:serial", "message": "4Relay (0x26): gefunden", "elapsed_s": 1.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933464, "location": "CoreS3:serial", "message": "RFID2 (0x28): gefunden", "elapsed_s": 1.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933465, "location": "CoreS3:serial", "message": "[ 14705][W][Wire.cpp:296] begin(): Bus already started in Master Mode.", "elapsed_s": 1.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933576, "location": "CoreS3:serial", "message": "RFID2 bereit", "elapsed_s": 1.4}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030933579, "location": "CoreS3:serial", "message": "4Relay OK", "elapsed_s": 1.4}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934125, "location": "CoreS3:serial", "message": "SoftAP: CoreS3-AP  IP: 192.168.4.1", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934125, "location": "CoreS3:serial", "message": "UDP bereit (Status:4211 Cmd:4210)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934156, "location": "CoreS3:serial", "message": "Setup complete", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934157, "location": "CoreS3:serial", "message": "=========== After Setup Start ============", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934157, "location": "CoreS3:serial", "message": "INTERNAL Memory Info:", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934158, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934158, "location": "CoreS3:serial", "message": "Total Size        :   349568 B ( 341.4 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934159, "location": "CoreS3:serial", "message": "Free Bytes        :   257608 B ( 251.6 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934159, "location": "CoreS3:serial", "message": "Allocated Bytes   :    83632 B (  81.7 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934160, "location": "CoreS3:serial", "message": "Minimum Free Bytes:   257608 B ( 251.6 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934160, "location": "CoreS3:serial", "message": "Largest Free Block:   192500 B ( 188.0 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934161, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934161, "location": "CoreS3:serial", "message": "SPIRAM Memory Info:", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934161, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934162, "location": "CoreS3:serial", "message": "Total Size        :  8388608 B (8192.0 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934162, "location": "CoreS3:serial", "message": "Free Bytes        :  8367444 B (8171.3 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934162, "location": "CoreS3:serial", "message": "Allocated Bytes   :    18084 B (  17.7 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934163, "location": "CoreS3:serial", "message": "Minimum Free Bytes:  8367420 B (8171.3 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934163, "location": "CoreS3:serial", "message": "Largest Free Block:  8257524 B (8064.0 KB)", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934163, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934164, "location": "CoreS3:serial", "message": "GPIO Info:", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934164, "location": "CoreS3:serial", "message": "------------------------------------------", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934164, "location": "CoreS3:serial", "message": "GPIO : BUS_TYPE[bus/unit][chan]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934164, "location": "CoreS3:serial", "message": "--------------------------------------", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "11 : I2C_MASTER_SCL[1]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "12 : I2C_MASTER_SDA[1]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "19 : USB_DM", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "20 : USB_DP", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "35 : SPI_MASTER_MISO[0]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "36 : SPI_MASTER_SCK[0]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934165, "location": "CoreS3:serial", "message": "37 : SPI_MASTER_MOSI[0]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934166, "location": "CoreS3:serial", "message": "43 : UART_TX[0]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934166, "location": "CoreS3:serial", "message": "44 : UART_RX[0]", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030934166, "location": "CoreS3:serial", "message": "============ After Setup End =============", "elapsed_s": 2.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030958506, "location": "CoreS3:serial", "message": "Write-Modus: warte auf Karte fuer UID 99A75C97", "elapsed_s": 26.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030958516, "location": "CoreS3:serial", "message": "[WR] write-mode aktiv, target=\"99A75C97\"", "elapsed_s": 26.4}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030958546, "location": "CoreS3:serial", "message": "[WR] no card (WUPA)", "elapsed_s": 26.4}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030958749, "location": "CoreS3:serial", "message": "[WR] no card (WUPA)", "elapsed_s": 26.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030958950, "location": "CoreS3:serial", "message": "[WR] no card (WUPA)", "elapsed_s": 26.8}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959153, "location": "CoreS3:serial", "message": "[WR] no card (WUPA)", "elapsed_s": 27.0}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959354, "location": "CoreS3:serial", "message": "[WR] no card (WUPA)", "elapsed_s": 27.2}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959555, "location": "CoreS3:serial", "message": "[WR] no card (WUPA)", "elapsed_s": 27.4}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959735, "location": "CoreS3:serial", "message": "[WR] card present (WUPA)", "elapsed_s": 27.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959763, "location": "CoreS3:serial", "message": "[WR] card UID read: 4 bytes, type=4", "elapsed_s": 27.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959763, "location": "CoreS3:serial", "message": "[WR] piccType=4 isMifare=1", "elapsed_s": 27.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959770, "location": "CoreS3:serial", "message": "[WR] auth status=0 (0=OK)", "elapsed_s": 27.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959836, "location": "CoreS3:serial", "message": "[WR] write status=0 target=\"99A75C97\"", "elapsed_s": 27.7}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030959836, "location": "CoreS3:serial", "message": "Write OK: \"99A75C97\"", "elapsed_s": 27.7}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030990569, "location": "CoreS3:serial", "message": "Scan-Modus gestartet", "elapsed_s": 58.4}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030991488, "location": "CoreS3:serial", "message": "RFID2 Block1-UID: DA2E72B1 (HW: 99A75C97)", "elapsed_s": 59.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030991489, "location": "CoreS3:serial", "message": "RFID2 Tag erkannt: DA2E72B1", "elapsed_s": 59.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772030991734, "location": "CoreS3:serial", "message": "Scan-Modus gestoppt", "elapsed_s": 59.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772031005443, "location": "CoreS3:serial", "message": "Scan-Modus gestartet", "elapsed_s": 73.3}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772031006719, "location": "CoreS3:serial", "message": "RFID2 Block1-UID: 99A75C97 (HW: DA2E72B1)", "elapsed_s": 74.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772031006719, "location": "CoreS3:serial", "message": "RFID2 Tag erkannt: 99A75C97", "elapsed_s": 74.6}
+{"sessionId": "405cb5", "runId": "block1-read", "timestamp": 1772031006883, "location": "CoreS3:serial", "message": "Scan-Modus gestoppt", "elapsed_s": 74.7}

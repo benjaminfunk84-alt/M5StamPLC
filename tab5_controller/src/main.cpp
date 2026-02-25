@@ -47,12 +47,19 @@ unsigned long gLastRxMs = 0;
 bool          gScanMode   = false;
 unsigned long gScanEndMs  = 0;
 
+// Tag erkannt – warte auf Bestätigung durch "SPEICHERN"-Button (10s)
+bool          gTagFound    = false;
+String        gFoundTag    = "";
+unsigned long gTagFoundEndMs = 0;
+
 // Write-Modus (10s – Tag auf Karte schreiben)
 bool          gWriteMode  = false;
 int           gWriteIdx   = -1;
 unsigned long gWriteEndMs = 0;
 bool          gWriteError = false;   // falscher Kartentyp
 unsigned long gWriteErrMs = 0;
+bool          gWriteOk    = false;   // Schreiben erfolgreich
+unsigned long gWriteOkMs  = 0;
 
 // Scroll für Tag-Liste
 int gTagScroll = 0;
@@ -80,6 +87,7 @@ struct Rect { int x, y, w, h;
 Rect rcRelay[4];
 Rect rcTagCard[20], rcTagDel[20], rcTagWrt[20];
 Rect rcScanBtn;
+Rect rcSaveBtn;
 Rect rcScrollUp, rcScrollDown;
 
 // ============================================
@@ -159,20 +167,30 @@ static void processJsonLine(const char* buf) {
     gWriteErrMs  = millis();
     gDirtyRfid   = true;
   }
+  // Write-Erfolg: Modus beenden, Erfolgs-Banner zeigen
+  if (doc["wrok"] | 0) {
+    gWriteOk   = true;
+    gWriteOkMs = millis();
+    gWriteMode = false;
+    gWriteIdx  = -1;
+    gDirtyRfid = true;
+  }
 
   bool wasConnected = gConnected;
   gConnected = true;
   gLastRxMs  = millis();
 
-  // Scan-Modus: neuen Tag automatisch hinzufügen (nur wenn aktiv)
+  // Scan-Modus: Tag erkannt → Bestätigung durch SPEICHERN-Button abwarten
   if (gScanMode && millis() < gScanEndMs && gCurTag.length() > 0 && gCurTag != "-") {
-    bool found = false;
-    for (int i = 0; i < (int)gTagCount; i++) { if (gTagList[i] == gCurTag) { found = true; break; } }
-    if (!found && gTagCount < 20) {
-      gTagList[gTagCount++] = gCurTag;
-      sendCmd("{\"cmd\":\"rfid_learn\"}");
-      gScanMode  = false;
-      gDirtyRfid = true;
+    bool alreadySaved = false;
+    for (int i = 0; i < (int)gTagCount; i++) { if (gTagList[i] == gCurTag) { alreadySaved = true; break; } }
+    if (!alreadySaved && !gTagFound) {
+      gTagFound      = true;
+      gFoundTag      = gCurTag;
+      gTagFoundEndMs = millis() + 10000;
+      gScanMode      = false;
+      sendCmd("{\"cmd\":\"rfid_scan_stop\"}");
+      gDirtyRfid   = true;
       gDirtyStatus = true;
     }
   }
@@ -338,10 +356,40 @@ static void drawRfidPanel() {
   sprRfid.setCursor(16, 12);
   sprRfid.print(hdr);
 
-  // ---- Banner: Scan-Modus / Write-Modus ----
+  // ---- Banner: Scan-Modus / Tag-Gefunden / Write-Modus ----
   int bannerH = 0;
   unsigned long now = millis();
-  if (gScanMode && now < gScanEndMs) {
+  rcSaveBtn = {0, 0, 0, 0};  // zurücksetzen
+  if (gWriteOk && (now - gWriteOkMs < 3000)) {
+    bannerH = 48;
+    sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, (uint32_t)C_GREEN);
+    sprRfid.setTextColor(C_BLACK, C_GREEN);
+    sprRfid.setTextSize(2);
+    sprRfid.setCursor(20, 46);
+    sprRfid.print("Erfolgreich geschrieben!");
+  } else if (gWriteOk) {
+    gWriteOk = false;  // Banner abgelaufen
+  } else if (gTagFound && now < gTagFoundEndMs) {
+    bannerH = 72;
+    int rem = (int)((gTagFoundEndMs - now) / 1000) + 1;
+    sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, (uint32_t)C_GREEN);
+    sprRfid.setTextColor(C_BLACK, C_GREEN);
+    sprRfid.setTextSize(2);
+    sprRfid.setCursor(20, 44);
+    sprRfid.printf("Tag: %s", gFoundTag.c_str());
+    // SPEICHERN-Button
+    const int svW = 200, svH = 38;
+    int svX = (ow - 24 - svW) / 2 + 12;
+    int svY = 66;
+    sprRfid.fillRoundRect(svX, svY, svW, svH, 8, (uint32_t)C_BLACK);
+    sprRfid.drawRoundRect(svX, svY, svW, svH, 8, (uint32_t)C_WHITE);
+    sprRfid.setTextColor(C_WHITE, C_BLACK);
+    sprRfid.setTextSize(2);
+    int btnTxtLen = snprintf(nullptr, 0, "SPEICHERN %ds", rem);
+    sprRfid.setCursor(svX + (svW - btnTxtLen * 12) / 2, svY + 11);
+    sprRfid.printf("SPEICHERN %ds", rem);
+    rcSaveBtn = {px + svX, S_H + svY, svW, svH};
+  } else if (gScanMode && now < gScanEndMs) {
     bannerH = 48;
     int rem = (int)((gScanEndMs - now) / 1000) + 1;
     sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, (uint32_t)C_ORANGE);
@@ -353,13 +401,13 @@ static void drawRfidPanel() {
     bannerH = 48;
     int rem = (int)((gWriteEndMs - now) / 1000) + 1;
     bool showErr = gWriteError && (now - gWriteErrMs < 3000);
-    uint32_t bCol = showErr ? C_RED : C_GREEN;
+    uint32_t bCol = showErr ? C_RED : C_ORANGE;
     sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, bCol);
     sprRfid.setTextColor(C_BLACK, bCol);
     sprRfid.setTextSize(2);
     sprRfid.setCursor(20, 46);
-    if (showErr) sprRfid.printf("Falscher Kartentyp! MIFARE Classic benoetigt");
-    else         sprRfid.printf("MIFARE Classic Karte halten... %ds", rem);
+    if (showErr) sprRfid.print("Falscher Kartentyp! MIFARE Classic");
+    else         sprRfid.printf("Karte halten zum Beschreiben... %ds", rem);
   }
 
   // ---- Tag-Liste ----
@@ -512,6 +560,21 @@ static void handleTouch(int tx, int ty) {
   if (rcScrollUp.hit(tx, ty))   { gTagScroll = max(0, gTagScroll - 1); gDirtyRfid = true; return; }
   if (rcScrollDown.hit(tx, ty)) { gTagScroll++; gDirtyRfid = true; return; }
 
+  // SPEICHERN-Button (erscheint nach Tag-Erkennung im Scan-Modus)
+  if (gTagFound && rcSaveBtn.hit(tx, ty)) {
+    bool alreadySaved = false;
+    for (int i = 0; i < (int)gTagCount; i++) { if (gTagList[i] == gFoundTag) { alreadySaved = true; break; } }
+    if (!alreadySaved && gTagCount < 20) {
+      gTagList[gTagCount++] = gFoundTag;
+      sendCmd("{\"cmd\":\"rfid_learn\"}");
+    }
+    gTagFound  = false;
+    gFoundTag  = "";
+    gDirtyRfid = true;
+    gDirtyStatus = true;
+    return;
+  }
+
   // Scan-Button
   if (rcScanBtn.hit(tx, ty)) {
     gScanMode = !gScanMode;
@@ -640,13 +703,16 @@ void loop() {
     sendCmd("{\"cmd\":\"rfid_scan_stop\"}");
     gDirtyRfid = true;
   }
+  if (gTagFound && now > gTagFoundEndMs) {
+    gTagFound = false; gFoundTag = ""; gDirtyRfid = true;
+  }
   if (gWriteMode && now > gWriteEndMs) {
     gWriteMode = false; gWriteIdx = -1; gDirtyRfid = true;
   }
 
   // Countdown im Banner alle 500ms aktualisieren
   static unsigned long lastBannerMs = 0;
-  if ((gScanMode || gWriteMode) && now - lastBannerMs > 500) {
+  if ((gScanMode || gTagFound || gWriteMode || gWriteOk) && now - lastBannerMs > 500) {
     lastBannerMs = now; gDirtyRfid = true;
   }
 
