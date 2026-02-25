@@ -66,6 +66,11 @@ int beepFlag = 0;
 String rfidTagList[20];
 uint8_t rfidTagCount = 0;
 
+// Write-Modus: nächste Karte am RFID2-Leser beschreiben
+bool    rfidWriteMode    = false;
+String  rfidWriteTarget  = "";
+unsigned long rfidWriteEndMs = 0;
+
 float cachedVoltage = 0.0f;
 float cachedCurrent = 0.0f;
 
@@ -189,7 +194,8 @@ void readRelayState() {
 // ============================================
 // ESP-NOW
 // ============================================
-void onEspNowRecv(const uint8_t* mac, const uint8_t* data, int len) {
+// IDF 5.x: neues Callback-Format mit esp_now_recv_info_t*
+void onEspNowRecv(const esp_now_recv_info_t* /*info*/, const uint8_t* data, int len) {
   if (len <= 0 || len > (int)ESPNOW_PAYLOAD_MAX) return;
   char buf[ESPNOW_PAYLOAD_MAX + 1];
   memcpy(buf, data, (size_t)len);
@@ -277,6 +283,29 @@ void handleCommandFromTab(const String &jsonStr) {
       }
     }
   }
+  else if (strcmp(cmd, "rfid_delete") == 0) {
+    const char* uid = doc["uid"];
+    if (uid) {
+      String uidStr = String(uid);
+      for (uint8_t i = 0; i < rfidTagCount; i++) {
+        if (rfidTagList[i] == uidStr) {
+          for (uint8_t j = i; j < rfidTagCount - 1; j++) rfidTagList[j] = rfidTagList[j + 1];
+          rfidTagCount--;
+          Serial.printf("RFID deleted: %s (remaining: %d)\n", uid, rfidTagCount);
+          break;
+        }
+      }
+    }
+  }
+  else if (strcmp(cmd, "write_tag") == 0) {
+    const char* uid = doc["uid"];
+    if (uid && rfid2Present) {
+      rfidWriteMode   = true;
+      rfidWriteTarget = String(uid);
+      rfidWriteEndMs  = millis() + 10000;
+      Serial.printf("Write-Modus: warte auf Karte fuer UID %s\n", uid);
+    }
+  }
   else if (strcmp(cmd, "rfid_play") == 0) {
     const char* tag = doc["tag"];
     if (tag && lastTag == String(tag)) {
@@ -301,6 +330,51 @@ String readRFID2() {
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
   return uid;
+}
+
+// ============================================
+// RFID2 – Daten auf MIFARE-Karte schreiben
+// Schreibt rfidWriteTarget (UID-String) in Block 1 (Sektor 0)
+// mit Default-Key A (FF FF FF FF FF FF)
+// ============================================
+bool writeUidToCard() {
+  if (!rfid2Present) return false;
+  if (!mfrc522.PICC_IsNewCardPresent()) return false;
+  if (!mfrc522.PICC_ReadCardSerial())   return false;
+
+  // Standard-Key A: 0xFF × 6 (MFRC522Constants::MIFARE_Misc::MF_KEY_SIZE = 6)
+  MFRC522Constants::MIFARE_Key key;
+  for (byte i = 0; i < MFRC522Constants::MIFARE_Misc::MF_KEY_SIZE; i++) key.keyByte[i] = 0xFF;
+
+  const byte blockAddr = 1;  // Block 1 in Sektor 0
+
+  // Authentifizieren
+  MFRC522Constants::StatusCode authStatus = mfrc522.PCD_Authenticate(
+      MFRC522Constants::PICC_CMD_MF_AUTH_KEY_A, blockAddr, &key, &mfrc522.uid);
+  if (authStatus != MFRC522Constants::STATUS_OK) {
+    Serial.printf("Auth failed: %d\n", (int)authStatus);
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+    return false;
+  }
+
+  // 16-Byte Puffer mit UID-String befüllen (Rest mit 0x00)
+  byte buf[16] = {0};
+  const char* src = rfidWriteTarget.c_str();
+  size_t len = min((size_t)16, strlen(src));
+  memcpy(buf, src, len);
+
+  // Schreiben
+  MFRC522Constants::StatusCode writeStatus = mfrc522.MIFARE_Write(blockAddr, buf, 16);
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+
+  if (writeStatus == MFRC522Constants::STATUS_OK) {
+    Serial.printf("Write OK: \"%s\" auf Karte\n", rfidWriteTarget.c_str());
+    return true;
+  }
+  Serial.printf("Write FAILED: %d\n", (int)writeStatus);
+  return false;
 }
 
 // ============================================
@@ -381,18 +455,32 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // RFID2: Karte lesen (WS1850S/MFRC522, 13.56 MHz MIFARE)
-  static uint32_t lastRfidPollMs = 0;
-  if (now - lastRfidPollMs >= 200) {
-    lastRfidPollMs = now;
-    String uid = readRFID2();
-    if (uid.length() > 0) {
-      if (uid != lastTag) {
-        lastTag = uid;
-        rfidTagCount++;
-        Serial.printf("RFID2 Tag: %s\n", uid.c_str());
+  // RFID2: Write-Modus hat Vorrang (10s Fenster, wartet auf Karte)
+  if (rfidWriteMode) {
+    if (now >= rfidWriteEndMs) {
+      rfidWriteMode = false;
+      Serial.println("Write-Modus: Timeout");
+    } else {
+      bool ok = writeUidToCard();
+      if (ok) {
+        rfidWriteMode = false;
+        beepFlag = 1;
       }
-      lastTagRefresh = now;
+    }
+  } else {
+    // Normaler Lese-Modus (alle 200 ms)
+    static uint32_t lastRfidPollMs = 0;
+    if (now - lastRfidPollMs >= 200) {
+      lastRfidPollMs = now;
+      String uid = readRFID2();
+      if (uid.length() > 0) {
+        if (uid != lastTag) {
+          lastTag = uid;
+          rfidTagCount++;
+          Serial.printf("RFID2 Tag: %s\n", uid.c_str());
+        }
+        lastTagRefresh = now;
+      }
     }
   }
 
