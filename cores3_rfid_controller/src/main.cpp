@@ -20,7 +20,8 @@
 // I2C-Adressen
 #define INA226_SHUNT_OHM  0.1f
 #define RELAY_I2C_ADDR    0x26   // 4Relay Modul
-#define RELAY_REG         0x11   // Relais + LED (Bits 0–3 Relais)
+#define RELAY_REG         0x10   // Relay-Switch (physisch) – beweis: 0x11 war LED-Register
+#define LED_REG           0x11   // LED-Switch (visuelle Anzeige am Modul)
 #define RFID2_I2C_ADDR    0x28   // M5Stack RFID2 / WS1850S
 
 uint8_t INA226_ADDR = 0;
@@ -183,13 +184,18 @@ void setRelay(uint8_t idx, bool state) {
   Serial.printf("[DBG] setRelay idx=%d state=%d val=0x%02X relayPresent=%d\n",
                 idx, (int)state, val, (int)relayPresent);
   // #endregion
-  uint8_t txErr = 255;
+  // Relay-Register 0x10 (physisch schalten)
   i2cBus->beginTransmission(RELAY_I2C_ADDR);
   i2cBus->write(RELAY_REG);
   i2cBus->write(val);
-  txErr = i2cBus->endTransmission();
+  uint8_t err0 = i2cBus->endTransmission();
+  // LED-Register 0x11 (visuelle Rückmeldung am Modul)
+  i2cBus->beginTransmission(RELAY_I2C_ADDR);
+  i2cBus->write(LED_REG);
+  i2cBus->write(val);
+  uint8_t err1 = i2cBus->endTransmission();
   // #region agent log H3
-  Serial.printf("[DBG] setRelay I2C write err=%d\n", txErr);
+  Serial.printf("[DBG] setRelay err0x10=%d err0x11=%d\n", err0, err1);
   // #endregion
 }
 
