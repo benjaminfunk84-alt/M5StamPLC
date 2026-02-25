@@ -51,6 +51,8 @@ unsigned long gScanEndMs  = 0;
 bool          gWriteMode  = false;
 int           gWriteIdx   = -1;
 unsigned long gWriteEndMs = 0;
+bool          gWriteError = false;   // falscher Kartentyp
+unsigned long gWriteErrMs = 0;
 
 // Scroll für Tag-Liste
 int gTagScroll = 0;
@@ -149,6 +151,13 @@ static void processJsonLine(const char* buf) {
       for (int i = 0; i < (int)gTagCount; i++) gTagList[i] = newList[i];
       gDirtyRfid = true;
     }
+  }
+
+  // Write-Fehler (falscher Kartentyp)
+  if (doc["wrerr"] | 0) {
+    gWriteError  = true;
+    gWriteErrMs  = millis();
+    gDirtyRfid   = true;
   }
 
   bool wasConnected = gConnected;
@@ -343,11 +352,14 @@ static void drawRfidPanel() {
   } else if (gWriteMode && now < gWriteEndMs) {
     bannerH = 48;
     int rem = (int)((gWriteEndMs - now) / 1000) + 1;
-    sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, (uint32_t)C_GREEN);
-    sprRfid.setTextColor(C_BLACK, C_GREEN);
+    bool showErr = gWriteError && (now - gWriteErrMs < 3000);
+    uint32_t bCol = showErr ? C_RED : C_GREEN;
+    sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, bCol);
+    sprRfid.setTextColor(C_BLACK, bCol);
     sprRfid.setTextSize(2);
     sprRfid.setCursor(20, 46);
-    sprRfid.printf("Beschreibbare Karte halten... %ds", rem);
+    if (showErr) sprRfid.printf("Falscher Kartentyp! MIFARE Classic benoetigt");
+    else         sprRfid.printf("MIFARE Classic Karte halten... %ds", rem);
   }
 
   // ---- Tag-Liste ----

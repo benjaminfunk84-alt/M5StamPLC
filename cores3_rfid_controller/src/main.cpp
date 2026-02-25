@@ -79,6 +79,9 @@ unsigned long rfidWriteEndMs = 0;
 bool    rfidScanMode     = false;
 unsigned long rfidScanEndMs = 0;
 
+// Write-Fehler: falscher Kartentyp (für Tab5-Anzeige)
+bool    writeErrorFlag   = false;
+
 float cachedVoltage = 0.0f;
 float cachedCurrent = 0.0f;
 
@@ -235,6 +238,8 @@ void sendStatusUdp() {
   for (uint8_t i = 0; i < rfidTagCount; i++)
     tagArray.add(rfidTagList[i]);
   doc["err"] = systemError;
+  doc["wrerr"] = writeErrorFlag ? 1 : 0;
+  writeErrorFlag = false;  // Einmalig senden, dann zurücksetzen
   JsonArray relayArray = doc["relays"].to<JsonArray>();
   for (int i = 0; i < 4; i++)
     relayArray.add(relayState[i] ? 1 : 0);
@@ -352,42 +357,63 @@ String readRFID2() {
 // mit Default-Key A (FF FF FF FF FF FF)
 // ============================================
 bool writeUidToCard() {
-  if (!rfid2Present) return false;
-  if (!mfrc522.PICC_IsNewCardPresent()) return false;
-  if (!mfrc522.PICC_ReadCardSerial())   return false;
+  if (!rfid2Present) { Serial.println("[WR] rfid2 not present"); return false; }
+  // #region agent log write-debug
+  if (!mfrc522.PICC_IsNewCardPresent()) { Serial.println("[WR] no new card"); return false; }
+  Serial.println("[WR] card present");
+  if (!mfrc522.PICC_ReadCardSerial()) { Serial.println("[WR] ReadSerial failed"); return false; }
+  Serial.printf("[WR] card UID read: %d bytes, type=%d\n",
+                mfrc522.uid.size, (int)mfrc522.PICC_GetType(mfrc522.uid.sak));
+  // #endregion
 
-  // Standard-Key A: 0xFF × 6 (MFRC522Constants::MIFARE_Misc::MF_KEY_SIZE = 6)
+  // Nur MIFARE Classic unterstützt (type 3=Mini, 4=1K, 5=4K)
+  MFRC522Constants::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+  bool isMifareClassic = (piccType == MFRC522Constants::PICC_TYPE_MIFARE_MINI ||
+                          piccType == MFRC522Constants::PICC_TYPE_MIFARE_1K   ||
+                          piccType == MFRC522Constants::PICC_TYPE_MIFARE_4K);
+  // #region agent log write-debug
+  Serial.printf("[WR] piccType=%d isMifare=%d\n", (int)piccType, (int)isMifareClassic);
+  // #endregion
+  if (!isMifareClassic) {
+    Serial.printf("[WR] Karte nicht MIFARE Classic (type=%d) - falscher Kartentyp!\n", (int)piccType);
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+    writeErrorFlag = true;  // Tab5 informieren
+    return false;
+  }
+
   MFRC522Constants::MIFARE_Key key;
   for (byte i = 0; i < MFRC522Constants::MIFARE_Misc::MF_KEY_SIZE; i++) key.keyByte[i] = 0xFF;
 
-  const byte blockAddr = 1;  // Block 1 in Sektor 0
+  const byte blockAddr = 1;
 
-  // Authentifizieren
   MFRC522Constants::StatusCode authStatus = mfrc522.PCD_Authenticate(
       MFRC522Constants::PICC_CMD_MF_AUTH_KEY_A, blockAddr, &key, &mfrc522.uid);
+  // #region agent log write-debug
+  Serial.printf("[WR] auth status=%d (0=OK)\n", (int)authStatus);
+  // #endregion
   if (authStatus != MFRC522Constants::STATUS_OK) {
-    Serial.printf("Auth failed: %d\n", (int)authStatus);
     mfrc522.PICC_HaltA();
     mfrc522.PCD_StopCrypto1();
     return false;
   }
 
-  // 16-Byte Puffer mit UID-String befüllen (Rest mit 0x00)
   byte buf[16] = {0};
   const char* src = rfidWriteTarget.c_str();
   size_t len = min((size_t)16, strlen(src));
   memcpy(buf, src, len);
 
-  // Schreiben
   MFRC522Constants::StatusCode writeStatus = mfrc522.MIFARE_Write(blockAddr, buf, 16);
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
 
+  // #region agent log write-debug
+  Serial.printf("[WR] write status=%d target=\"%s\"\n", (int)writeStatus, rfidWriteTarget.c_str());
+  // #endregion
   if (writeStatus == MFRC522Constants::STATUS_OK) {
-    Serial.printf("Write OK: \"%s\" auf Karte\n", rfidWriteTarget.c_str());
+    Serial.printf("Write OK: \"%s\"\n", rfidWriteTarget.c_str());
     return true;
   }
-  Serial.printf("Write FAILED: %d\n", (int)writeStatus);
   return false;
 }
 
@@ -476,6 +502,11 @@ void loop() {
       lastTag = "-";
       Serial.println("Write-Modus: Timeout");
     } else {
+      // #region agent log write-debug
+      static uint32_t lastWriteLog = 0;
+      if (now - lastWriteLog > 2000) { lastWriteLog = now;
+        Serial.printf("[WR] write-mode aktiv, target=\"%s\"\n", rfidWriteTarget.c_str()); }
+      // #endregion
       bool ok = writeUidToCard();
       if (ok) {
         rfidWriteMode = false;
