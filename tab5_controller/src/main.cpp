@@ -352,10 +352,11 @@ static void drawRfidPanel() {
 
   // ---- Tag-Liste ----
   const int SCAN_BTN_H = 58;
-  const int TAG_H      = 90;   // größer für besser lesbare Beschriftung
+  const int TAG_H      = 90;
   const int TAG_GAP    = 6;
   const int TAG_X      = 12;
-  const int TAG_W      = ow - 24;
+  const int SCROLL_COL = 44;    // Breite der Scroll-Spalte rechts (eigene Zone)
+  const int TAG_W      = ow - 24 - SCROLL_COL;  // Tags enden vor Scroll-Spalte
   const int LIST_Y     = 34 + bannerH + 4;
   int listH    = ph - LIST_Y - SCAN_BTN_H - 16;
   int maxVis   = max(1, listH / (TAG_H + TAG_GAP));
@@ -435,17 +436,25 @@ static void drawRfidPanel() {
     sprRfid.print("Unten auf + tippen.");
   }
 
-  // Scroll-Buttons (wenn nötig)
+  // Scroll-Buttons in eigener Spalte (SCROLL_COL, rechts neben TAG-Bereich)
+  int scX = ow - SCROLL_COL + 4;  // x-Mitte der Scroll-Spalte
+  int scW = SCROLL_COL - 8;
   if (gTagCount > maxVis) {
-    // Nach oben
+    // Nach oben (Dreieck in Scroll-Spalte, über der Liste)
+    int upCy = LIST_Y + 16;
     uint32_t upC = (gTagScroll > 0) ? C_CYAN : C_DIMGREY;
-    sprRfid.fillTriangle(ow - 22, LIST_Y + 10, ow - 10, LIST_Y + 30, ow - 34, LIST_Y + 30, upC);
-    rcScrollUp = {px + ow - 40, S_H + LIST_Y, 40, 40};
+    sprRfid.fillTriangle(scX + scW/2, upCy - 10,
+                         scX + scW,   upCy + 10,
+                         scX,         upCy + 10, upC);
+    rcScrollUp = {px + scX, S_H + LIST_Y, scW, 36};
+
     // Nach unten
-    int dnY = LIST_Y + listH - 30;
+    int dnCy = LIST_Y + listH - 16;
     uint32_t dnC = (visEnd < (int)gTagCount) ? C_CYAN : C_DIMGREY;
-    sprRfid.fillTriangle(ow - 22, dnY + 20, ow - 10, dnY, ow - 34, dnY, dnC);
-    rcScrollDown = {px + ow - 40, S_H + dnY - 10, 40, 40};
+    sprRfid.fillTriangle(scX + scW/2, dnCy + 10,
+                         scX + scW,   dnCy - 10,
+                         scX,         dnCy - 10, dnC);
+    rcScrollDown = {px + scX, S_H + dnCy - 26, scW, 36};
   } else {
     rcScrollUp = rcScrollDown = {0, 0, 0, 0};
   }
@@ -493,8 +502,10 @@ static void handleTouch(int tx, int ty) {
 
   // Scan-Button
   if (rcScanBtn.hit(tx, ty)) {
-    gScanMode  = !gScanMode;
+    gScanMode = !gScanMode;
     gScanEndMs = gScanMode ? millis() + 5000 : 0;
+    if (gScanMode) sendCmd("{\"cmd\":\"rfid_scan_start\"}");
+    else           sendCmd("{\"cmd\":\"rfid_scan_stop\"}");
     gDirtyRfid = true;
     return;
   }
@@ -535,6 +546,10 @@ static void handleTouch(int tx, int ty) {
         gWriteMode  = true;
         gWriteIdx   = i;
         gWriteEndMs = millis() + 10000;
+        // Schreib-Befehl mit UID an CoreS3 senden
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"write_tag\",\"uid\":\"%s\"}", gTagList[i].c_str());
+        sendCmd(cmd);
       }
       gDirtyRfid = true;
       return;
@@ -609,7 +624,9 @@ void loop() {
 
   // Modus-Timeouts
   if (gScanMode && now > gScanEndMs) {
-    gScanMode = false; gDirtyRfid = true;
+    gScanMode = false;
+    sendCmd("{\"cmd\":\"rfid_scan_stop\"}");
+    gDirtyRfid = true;
   }
   if (gWriteMode && now > gWriteEndMs) {
     gWriteMode = false; gWriteIdx = -1; gDirtyRfid = true;

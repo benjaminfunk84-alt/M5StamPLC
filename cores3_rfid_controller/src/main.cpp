@@ -75,6 +75,10 @@ bool    rfidWriteMode    = false;
 String  rfidWriteTarget  = "";
 unsigned long rfidWriteEndMs = 0;
 
+// Scan-Modus: nur wenn von Tab5 aktiviert (rfid_scan_start)
+bool    rfidScanMode     = false;
+unsigned long rfidScanEndMs = 0;
+
 float cachedVoltage = 0.0f;
 float cachedCurrent = 0.0f;
 
@@ -268,6 +272,18 @@ void handleCommandFromTab(const String &jsonStr) {
       Serial.printf("Relay %d set to %d\n", idx, relayState[idx] ? 1 : 0);
     }
   }
+  else if (strcmp(cmd, "rfid_scan_start") == 0) {
+    rfidScanMode   = true;
+    rfidScanEndMs  = millis() + 6000;  // 6s (etwas länger als Tab5's 5s)
+    lastTag        = "-";
+    lastTagRefresh = 0;
+    Serial.println("Scan-Modus gestartet");
+  }
+  else if (strcmp(cmd, "rfid_scan_stop") == 0) {
+    rfidScanMode = false;
+    lastTag      = "-";
+    Serial.println("Scan-Modus gestoppt");
+  }
   else if (strcmp(cmd, "rfid_learn") == 0) {
     if (lastTag != "-" && lastTag.length() > 0 && rfidTagCount < 20) {
       bool found = false;
@@ -453,37 +469,43 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // RFID2: Write-Modus hat Vorrang (10s Fenster, wartet auf Karte)
+  // RFID2: Write-Modus hat Vorrang; Scan nur wenn von Tab5 aktiviert
   if (rfidWriteMode) {
     if (now >= rfidWriteEndMs) {
       rfidWriteMode = false;
+      lastTag = "-";
       Serial.println("Write-Modus: Timeout");
     } else {
       bool ok = writeUidToCard();
       if (ok) {
         rfidWriteMode = false;
         beepFlag = 1;
+        lastTag = "-";
       }
+    }
+  } else if (rfidScanMode) {
+    if (now >= rfidScanEndMs) {
+      rfidScanMode = false;
+      lastTag = "-";
+      Serial.println("Scan-Modus: Timeout");
+    } else {
+      static uint32_t lastRfidPollMs = 0;
+      if (now - lastRfidPollMs >= 200) {
+        lastRfidPollMs = now;
+        String uid = readRFID2();
+        if (uid.length() > 0) {
+          lastTag = uid;
+          lastTagRefresh = now;
+          Serial.printf("RFID2 Tag erkannt: %s\n", uid.c_str());
+        }
+      }
+    }
+    if (now - lastTagRefresh > RFID_TIMEOUT_MS && lastTag != "-") {
+      lastTag = "-";
     }
   } else {
-    // Normaler Lese-Modus (alle 200 ms)
-    static uint32_t lastRfidPollMs = 0;
-    if (now - lastRfidPollMs >= 200) {
-      lastRfidPollMs = now;
-      String uid = readRFID2();
-      if (uid.length() > 0) {
-        if (uid != lastTag) {
-          lastTag = uid;
-          rfidTagCount++;
-          Serial.printf("RFID2 Tag: %s\n", uid.c_str());
-        }
-        lastTagRefresh = now;
-      }
-    }
-  }
-
-  if (now - lastTagRefresh > RFID_TIMEOUT_MS && lastTag != "-") {
-    lastTag = "-";
+    // Kein aktiver Modus: kein Scan, lastTag leer
+    if (lastTag != "-") lastTag = "-";
   }
 
   // I2C: nur INA226 lesen; readRelayState() entfernt da raw=0xFF unreliable
