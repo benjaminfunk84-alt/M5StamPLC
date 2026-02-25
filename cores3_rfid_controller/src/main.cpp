@@ -180,23 +180,15 @@ void setRelay(uint8_t idx, bool state) {
   relayState[idx] = state;
   uint8_t val = 0;
   for (int i = 0; i < 4; i++) if (relayState[i]) val |= (1 << i);
-  // #region agent log H3
-  Serial.printf("[DBG] setRelay idx=%d state=%d val=0x%02X relayPresent=%d\n",
-                idx, (int)state, val, (int)relayPresent);
-  // #endregion
-  // Relay-Register 0x10 (physisch schalten)
+  // REG 0x10 aktiv-high: bit=1 → Relais erregt (NO geschlossen)
   i2cBus->beginTransmission(RELAY_I2C_ADDR);
   i2cBus->write(RELAY_REG);
   i2cBus->write(val);
-  uint8_t err0 = i2cBus->endTransmission();
-  // LED-Register 0x11 (visuelle Rückmeldung am Modul)
+  i2cBus->endTransmission();
   i2cBus->beginTransmission(RELAY_I2C_ADDR);
   i2cBus->write(LED_REG);
   i2cBus->write(val);
-  uint8_t err1 = i2cBus->endTransmission();
-  // #region agent log H3
-  Serial.printf("[DBG] setRelay err0x10=%d err0x11=%d\n", err0, err1);
-  // #endregion
+  i2cBus->endTransmission();
 }
 
 void readRelayState() {
@@ -205,10 +197,6 @@ void readRelayState() {
   if (i2cBus->endTransmission(false) != 0) return;
   if (i2cBus->requestFrom((uint16_t)RELAY_I2C_ADDR, (uint8_t)1, (uint8_t)1) != 1) return;
   uint8_t val = i2cBus->read();
-  // #region agent log H1
-  Serial.printf("[DBG] readRelayState raw=0x%02X -> R:%d%d%d%d\n",
-                val, (val>>0)&1, (val>>1)&1, (val>>2)&1, (val>>3)&1);
-  // #endregion
   for (int i = 0; i < 4; i++) relayState[i] = (val & (1 << i)) != 0;
 }
 
@@ -231,9 +219,6 @@ void receiveCommandsUdp() {
   char buf[UDP_PAYLOAD_MAX + 1];
   int r = udpCmd.read(buf, UDP_PAYLOAD_MAX);
   buf[r] = '\0';
-  // #region agent log H2
-  Serial.printf("[DBG] UDP CMD empfangen (%d bytes): %s\n", r, buf);
-  // #endregion
   handleCommandFromTab(String(buf));
 }
 
@@ -255,15 +240,6 @@ void sendStatusUdp() {
   size_t n = serializeJson(doc, out, sizeof(out));
   if (n == 0 || n >= UDP_PAYLOAD_MAX) return;
 
-  // #region agent log H2 – Status alle 5s loggen
-  static uint32_t lastStatusLog = 0;
-  if (millis() - lastStatusLog > 5000) {
-    lastStatusLog = millis();
-    Serial.printf("[DBG] STATUS: R=%d%d%d%d  U=%.2f  json=%s\n",
-                  relayState[0], relayState[1], relayState[2], relayState[3],
-                  cachedVoltage, out);
-  }
-  // #endregion
   IPAddress bcast(192, 168, 4, 255);
   udpStatus.beginPacket(bcast, UDP_STATUS_PORT);
   udpStatus.write((const uint8_t*)out, n);

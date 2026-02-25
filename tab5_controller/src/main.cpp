@@ -104,12 +104,9 @@ static WiFiUDP udpRx;   // Status empfangen + Commands senden (initialisierter S
 static void sendCmd(const char* json) {
   // udpRx (mit begin() initialisiert) für Broadcast-Versand verwenden
   static const IPAddress broadcastIP(192, 168, 4, 255);
-  int rb = udpRx.beginPacket(broadcastIP, UDP_CMD_PORT);
+  udpRx.beginPacket(broadcastIP, UDP_CMD_PORT);
   udpRx.print(json);
-  int re = udpRx.endPacket();
-  // #region agent log H2
-  Serial.printf("[DBG] sendCmd begin=%d end=%d json=%s\n", rb, re, json);
-  // #endregion
+  udpRx.endPacket();
 }
 
 // Forward decl
