@@ -56,10 +56,19 @@ unsigned long gTagFoundEndMs = 0;
 bool          gWriteMode  = false;
 int           gWriteIdx   = -1;
 unsigned long gWriteEndMs = 0;
+unsigned long gPn532EmulEndMs = 0;  // Banner „Gerät an Reader halten“ nach SENDEN (PN532)
 bool          gWriteError = false;   // falscher Kartentyp
 unsigned long gWriteErrMs = 0;
 bool          gWriteOk    = false;   // Schreiben erfolgreich
 unsigned long gWriteOkMs  = 0;
+
+// PN532 Card-Emulation (nur anzeigen wenn CoreS3 PN532 meldet)
+bool          gPn532Present = false;
+bool          gEmulActive   = false;
+// Schreiben: RC522 (Legacy) oder CHARX 3150 per RS-485. PN532 = Emulation (Gerät an Reader halten).
+bool          gRc522Present = false;   // Schreiben-Button (RC522 oder RS-485)
+bool          gCharxRs485Present = false;  // UID direkt an CHARX 3150 (RS-485) sendbar
+bool          gWritePathPn532 = true;     // true = PN532-Emulation, false = RS-485/CHARX (Umschalter)
 
 // Scroll für Tag-Liste
 int gTagScroll = 0;
@@ -85,7 +94,8 @@ struct Rect { int x, y, w, h;
   }
 };
 Rect rcRelay[4];
-Rect rcTagCard[20], rcTagDel[20], rcTagWrt[20];
+Rect rcTagCard[20], rcTagDel[20], rcTagWrt[20], rcTagEmul[20];
+Rect rcWritePathPn532, rcWritePathRs485;  // Umschalter PN532 / RS-485 unten links
 Rect rcScanBtn;
 Rect rcSaveBtn;
 Rect rcScrollUp, rcScrollDown;
@@ -175,6 +185,12 @@ static void processJsonLine(const char* buf) {
     gWriteIdx  = -1;
     gDirtyRfid = true;
   }
+  gPn532Present = (doc["pn532"] | 0) != 0;
+  gRc522Present = (doc["rc522"] | 0) != 0;  // Schreiben (RC522 oder RS-485)
+  gCharxRs485Present = (doc["charx_rs485"] | 0) != 0;  // Ziel CHARX 3150 per RS-485
+  gEmulActive   = (doc["emul"] | 0) != 0;
+  if (gPn532Present || gEmulActive) { gDirtyRfid = true; gDirtyStatus = true; }
+  if (gPn532Present || gCharxRs485Present) gDirtyRelay = true;  // Umschalter anzeigen
 
   bool wasConnected = gConnected;
   gConnected = true;
@@ -257,9 +273,12 @@ static void drawStatusBar() {
   snprintf(buf, sizeof(buf), "%.3f A", gAmp);
   sprStatus.print(buf);
 
-  // RFID-Status (nur im Scan-Modus aktuellen Tag zeigen)
+  // RFID-Status (Scan / Emulation / normal)
   sprStatus.setCursor(650, 18);
-  if (gScanMode) {
+  if (gEmulActive) {
+    sprStatus.setTextColor(C_GREEN, C_PANEL);
+    sprStatus.print("Emulation aktiv");
+  } else if (gScanMode) {
     sprStatus.setTextColor(C_ORANGE, C_PANEL);
     sprStatus.print("SCAN: ");
     sprStatus.setTextColor(gCurTag != "-" ? C_WHITE : C_DIMGREY, C_PANEL);
@@ -331,6 +350,31 @@ static void drawRelayPanel() {
 
     // Hit-Area in Display-Koordinaten
     rcRelay[i] = {CARD_X, S_H + cy, CARD_W, CARD_H};
+  }
+
+  // Umschalter PN532 / RS-485 unten links (nur wenn mindestens ein Weg verfügbar)
+  const int SWITCH_BAR_H = 52;
+  if (gPn532Present || gCharxRs485Present) {
+    int swY = ph - SWITCH_BAR_H - 6;  // 6px Abstand zum unteren Rand
+    int halfW = pw / 2;
+    sprRelay.drawFastHLine(0, swY - 2, pw, C_DIVIDER);
+    // Ausgewählte Seite immer cyan (wie RS-485), unabhängig von gPn532Present
+    uint32_t pnBg = gWritePathPn532 ? C_CYAN : C_DIMGREY;
+    uint32_t rsBg = !gWritePathPn532 ? C_CYAN : C_DIMGREY;
+    if (!gCharxRs485Present) rsBg = C_DIMGREY;  // RS-485 nur grau wenn nicht verfügbar
+    sprRelay.fillRoundRect(0, swY, halfW, SWITCH_BAR_H, 8, pnBg);
+    sprRelay.fillRoundRect(halfW, swY, halfW, SWITCH_BAR_H, 8, rsBg);
+    sprRelay.setTextColor(C_BLACK, pnBg);
+    sprRelay.setTextSize(2);
+    sprRelay.setCursor(20, swY + 16);
+    sprRelay.print("PN532");
+    sprRelay.setTextColor(C_BLACK, rsBg);
+    sprRelay.setCursor(halfW + 20, swY + 16);
+    sprRelay.print("RS-485");
+    rcWritePathPn532 = {0, S_H + swY, halfW, SWITCH_BAR_H};
+    rcWritePathRs485 = {halfW, S_H + swY, halfW, SWITCH_BAR_H};
+  } else {
+    rcWritePathPn532 = rcWritePathRs485 = {0, 0, 0, 0};
   }
 
   sprRelay.pushSprite(&M5.Display, 0, S_H);
@@ -407,7 +451,17 @@ static void drawRfidPanel() {
     sprRfid.setTextSize(2);
     sprRfid.setCursor(20, 46);
     if (showErr) sprRfid.print("Falscher Kartentyp! MIFARE Classic");
-    else         sprRfid.printf("Karte halten zum Beschreiben... %ds", rem);
+    else if (gCharxRs485Present) sprRfid.printf("UID an CHARX 3150 (RS-485)... %ds", rem);
+    else if (gPn532Present) sprRfid.printf("Gerät mit PN532 an Reader halten... %ds", rem);
+    else sprRfid.printf("Karte auflegen... %ds", rem);
+  } else if (gPn532EmulEndMs > 0 && now < gPn532EmulEndMs) {
+    bannerH = 48;
+    int rem = (int)((gPn532EmulEndMs - now) / 1000) + 1;
+    sprRfid.fillRoundRect(12, 30, ow - 24, bannerH, 8, (uint32_t)C_ORANGE);
+    sprRfid.setTextColor(C_BLACK, C_ORANGE);
+    sprRfid.setTextSize(2);
+    sprRfid.setCursor(20, 46);
+    sprRfid.printf("Gerät an Reader halten (PN532)... %ds", rem);
   }
 
   // ---- Tag-Liste ----
@@ -426,11 +480,18 @@ static void drawRfidPanel() {
 
   int visEnd = min((int)gTagCount, gTagScroll + maxVis);
 
-  // Button-Dimensionen (Schreiben größer, mehr Abstand zu Löschen)
-  const int dBtnW = 48, dBtnH = 40;  // Delete: quadratisch
-  const int wBtnW = 120, wBtnH = 40; // Write: breiter
-  const int btnGap = 20;             // Abstand zwischen den Buttons
+  // Alte Hit-Rects löschen, damit nur sichtbare Tags reagieren
+  for (int j = 0; j < 20; j++) {
+    rcTagWrt[j] = {0, 0, 0, 0};
+    rcTagEmul[j] = {0, 0, 0, 0};
+  }
+
+  // Button-Dimensionen: ein SENDEN-Button (weiter links, mehr Abstand zum Löschen-Button)
+  const int dBtnW = 48, dBtnH = 40;   // Delete
+  const int sBtnW = 100, sBtnH = 40;  // SENDEN
+  const int btnGap = 28;              // Abstand SENDEN ↔ Löschen (größer = SENDEN weiter links)
   const int dBtnRightMargin = 8;
+  bool showSendBtn = gPn532Present || gCharxRs485Present;
 
   for (int i = gTagScroll; i < visEnd; i++) {
     int cy = LIST_Y + (i - gTagScroll) * (TAG_H + TAG_GAP);
@@ -441,10 +502,10 @@ static void drawRfidPanel() {
     sprRfid.fillRoundRect(TAG_X, cy, TAG_W, TAG_H, 8, bg);
     sprRfid.drawRoundRect(TAG_X, cy, TAG_W, TAG_H, 8, brd);
 
-    // Button-Positionen (von rechts berechnet)
+    // Von rechts: Del, SENDEN (ein Button)
     int dBtnX = TAG_W - dBtnW - dBtnRightMargin;
-    int wBtnX = dBtnX - btnGap - wBtnW;
-    int btnY  = cy + (TAG_H - wBtnH) / 2;
+    int sBtnX = dBtnX - btnGap - sBtnW;
+    int btnY  = cy + (TAG_H - sBtnH) / 2;
 
     // Index-Label (größer)
     sprRfid.setTextSize(2);
@@ -460,30 +521,33 @@ static void drawRfidPanel() {
     sprRfid.setTextSize(2);
     sprRfid.setTextColor(C_CYAN, bg);
     sprRfid.setCursor(TAG_X + 42, cy + 58);
-    // Zeilenumbruch falls zu lang (>14 Zeichen)
     String uid = gTagList[i];
     sprRfid.print(uid.length() > 14 ? uid.substring(0, 14) : uid);
 
-    // Write-Button (cyan, größer)
-    uint32_t wCol = isWriteTarget ? C_GREEN : C_CYAN;
-    sprRfid.fillRoundRect(TAG_X + wBtnX, btnY, wBtnW, wBtnH, 8, wCol);
-    sprRfid.setTextColor(C_BLACK, wCol);
-    sprRfid.setTextSize(2);
-    int wTxtX = TAG_X + wBtnX + (wBtnW - (isWriteTarget ? 9 : 8) * 12) / 2;
-    sprRfid.setCursor(wTxtX, btnY + 12);
-    sprRfid.print(isWriteTarget ? "ABBRUCH" : "SCHREIBEN");
+    // Ein SENDEN-Button (nutzt PN532 oder RS-485 je nach Umschalter)
+    if (showSendBtn) {
+      uint32_t sCol = isWriteTarget ? C_GREEN : (gWritePathPn532 ? C_ORANGE : C_CYAN);
+      const char* sLabel = isWriteTarget ? "ABBR." : "SENDEN";
+      sprRfid.fillRoundRect(TAG_X + sBtnX, btnY, sBtnW, sBtnH, 8, sCol);
+      sprRfid.setTextColor(C_BLACK, sCol);
+      sprRfid.setTextSize(2);
+      int sTxtW = strlen(sLabel) * 12;
+      sprRfid.setCursor(TAG_X + sBtnX + (sBtnW - sTxtW) / 2, btnY + 10);
+      sprRfid.print(sLabel);
+      rcTagWrt[i]  = {px + TAG_X + sBtnX, S_H + btnY, sBtnW, sBtnH};
+    } else {
+      rcTagWrt[i] = {0, 0, 0, 0};
+    }
 
-    // Delete-Button (rot, quadratisch, mit Abstand)
+    // Delete-Button (rot, quadratisch)
     sprRfid.fillRoundRect(TAG_X + dBtnX, btnY, dBtnW, dBtnH, 8, (uint32_t)C_RED);
     sprRfid.setTextColor(C_WHITE, C_RED);
     sprRfid.setTextSize(2);
     sprRfid.setCursor(TAG_X + dBtnX + 16, btnY + 12);
     sprRfid.print("X");
 
-    // Hit-Areas in Display-Koordinaten
-    rcTagCard[i] = {px + TAG_X,          S_H + cy,    wBtnX - 8,  TAG_H};
-    rcTagWrt[i]  = {px + TAG_X + wBtnX,  S_H + btnY,  wBtnW, wBtnH};
-    rcTagDel[i]  = {px + TAG_X + dBtnX,  S_H + btnY,  dBtnW, dBtnH};
+    rcTagCard[i] = {px + TAG_X, S_H + cy, showSendBtn ? sBtnX - 8 : TAG_W - 8, TAG_H};
+    rcTagDel[i]  = {px + TAG_X + dBtnX, S_H + btnY, dBtnW, dBtnH};
   }
 
   // Keine Tags
@@ -586,6 +650,18 @@ static void handleTouch(int tx, int ty) {
   }
 
   // Relay-Karten
+  if (gPn532Present || gCharxRs485Present) {
+    if (rcWritePathPn532.hit(tx, ty)) {
+      gWritePathPn532 = true;
+      gDirtyRelay = true;
+      return;
+    }
+    if (rcWritePathRs485.hit(tx, ty)) {
+      gWritePathPn532 = false;
+      gDirtyRelay = true;
+      return;
+    }
+  }
   for (int i = 0; i < 4; i++) {
     if (rcRelay[i].hit(tx, ty)) {
       char cmd[64];
@@ -597,8 +673,10 @@ static void handleTouch(int tx, int ty) {
     }
   }
 
-  // Tag-Buttons (nur sichtbare)
-  int maxVis = max(1, (DH - S_H - 34 - 74) / 80);
+  // Tag-Buttons (nur sichtbare – gleiche Formel wie im Draw)
+  const int TAG_H = 90, TAG_GAP = 6, SCAN_BTN_H = 58, LIST_Y_BASE = 34 + 4;
+  int listH = (DH - S_H) - LIST_Y_BASE - SCAN_BTN_H - 16;
+  int maxVis = max(1, listH / (TAG_H + TAG_GAP));
   int visEnd = min((int)gTagCount, gTagScroll + maxVis);
   for (int i = gTagScroll; i < visEnd && i < 20; i++) {
     // Löschen
@@ -613,17 +691,33 @@ static void handleTouch(int tx, int ty) {
       gDirtyRfid = true;
       return;
     }
-    // Schreiben / Abbrechen
+    // SENDEN (ein Button: PN532 oder RS-485 je nach Umschalter)
     if (rcTagWrt[i].hit(tx, ty)) {
-      if (gWriteMode && gWriteIdx == i) {
-        gWriteMode = false; gWriteIdx = -1;  // Abbrechen
-      } else {
+      if (!(gPn532Present || gCharxRs485Present)) return;
+      // PN532: rfid_emulate senden + kurzes Banner (wie Karte kurz anhalten)
+      if (gWritePathPn532) {
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"rfid_emulate\",\"uid\":\"%s\"}", gTagList[i].c_str());
+        sendCmd(cmd);
+        gPn532EmulEndMs = millis() + 8000;  // 8 s Anzeige wie bei RS-485
+        gWriteMode = false;
+        gWriteIdx  = -1;
+        gDirtyRfid = true;
+        return;
+      }
+      // RS-485: Abbrechen oder UID senden
+      if (gCharxRs485Present) {
+        if (gWriteMode && gWriteIdx == i) {
+          gWriteMode = false;
+          gWriteIdx  = -1;
+          gDirtyRfid = true;
+          return;
+        }
         gWriteMode  = true;
         gWriteIdx   = i;
         gWriteEndMs = millis() + 10000;
-        // Schreib-Befehl mit UID an CoreS3 senden
-        char cmd[128];
-        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"write_tag\",\"uid\":\"%s\"}", gTagList[i].c_str());
+        char cmd[160];
+        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"write_tag\",\"uid\":\"%s\",\"target\":\"rs485\"}", gTagList[i].c_str());
         sendCmd(cmd);
       }
       gDirtyRfid = true;
@@ -709,10 +803,13 @@ void loop() {
   if (gWriteMode && now > gWriteEndMs) {
     gWriteMode = false; gWriteIdx = -1; gDirtyRfid = true;
   }
+  if (gPn532EmulEndMs > 0 && now > gPn532EmulEndMs) {
+    gPn532EmulEndMs = 0; gDirtyRfid = true;
+  }
 
   // Countdown im Banner alle 500ms aktualisieren
   static unsigned long lastBannerMs = 0;
-  if ((gScanMode || gTagFound || gWriteMode || gWriteOk) && now - lastBannerMs > 500) {
+  if ((gScanMode || gTagFound || gWriteMode || gWriteOk || gPn532EmulEndMs > 0) && now - lastBannerMs > 500) {
     lastBannerMs = now; gDirtyRfid = true;
   }
 

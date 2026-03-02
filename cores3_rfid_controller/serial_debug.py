@@ -23,13 +23,18 @@ except Exception as e:
     print(f"FEHLER: {e}")
     sys.exit(1)
 
+# CoreS3/ESP32 per DTR resetten, damit ein frischer Boot geloggt wird
+ser.dtr = False
+time.sleep(0.12)
+ser.dtr = True
+time.sleep(0.8)
 ser.reset_input_buffer()
 
 os.makedirs(os.path.dirname(LOGFILE), exist_ok=True)
 start = time.time()
 count = 0
 
-with open(LOGFILE, "a") as log:
+with open(LOGFILE, "w") as log:
     print(f"Lese {TIMEOUT}s ... (Ctrl+C zum Abbrechen)")
     while (time.time() - start) < TIMEOUT:
         try:

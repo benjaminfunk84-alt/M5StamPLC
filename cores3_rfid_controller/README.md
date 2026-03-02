@@ -21,12 +21,12 @@ Am **M5CoreS3** direkt (ohne CatM) gibt es seitlich zwei **HY2.0-4P**-Buchsen (G
 
 | Anschluss | CoreS3 **Port A** (rot, I2C) | Draht/Farbe (typ. Grove) |
 |-----------|-----------------------------|---------------------------|
-| **SDA**   | G2                          | Gelb |
-| **SCL**   | G1                          | Weiß |
-| **VCC**   | 5V (rot)                    | Rot |
-| **GND**   | GND (schwarz)               | Schwarz |
+| **SDA**   | G2 (GPIO 21)       | Gelb |
+| **SCL**   | G1 (GPIO 22)       | Weiß |
+| **VCC**   | 5V (rot)           | Rot |
+| **GND**   | GND (schwarz)      | Schwarz |
 
-- **Buchse:** **Port A** (roter Stecker, I2C).
+- **Buchse:** **Port A** (roter Stecker, I2C). 5V ist korrekt für PN532 und M5Stack-Ökosystem.
 - I2C-Adresse im Code: **0x41** (bei anderer Adresse in `main.cpp` anpassen).
 - **Hinweis:** 4Relay hängt am **Stack** (M-Bus). INA226 kannst du per **Adapterkabel** an Port A des **CoreS3** (oben am Gerät) anschließen, wenn du ein separates INA226-Modul nutzt.
 

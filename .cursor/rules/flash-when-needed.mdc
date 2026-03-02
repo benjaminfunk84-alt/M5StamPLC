@@ -1,0 +1,19 @@
+---
+description: Bei Firmware-Änderungen selbst bauen und flashen (PlatformIO)
+globs: cores3_rfid_controller/**/*, tab5_controller/**/*
+alwaysApply: false
+---
+
+# Flash für dieses Projekt selbst ausführen
+
+Wenn du Code in **cores3_rfid_controller** oder **tab5_controller** änderst und ein neues Firmware-Image nötig ist:
+
+1. **CoreS3 (RFID-Controller):** Im Projektordner bauen und flashen:
+   - `cd /home/bfunk/m5stamplc_display_work/cores3_rfid_controller && pio run -t upload`
+   - Environment: `cores3` (M5Stack CoreS3, typ. /dev/ttyACM0)
+
+2. **Tab5 (Display-Controller):** Im Projektordner bauen und flashen:
+   - `cd /home/bfunk/m5stamplc_display_work/tab5_controller && pio run -t upload`
+   - Environment: `tab5` (ESP32-P4 Tab5, typ. /dev/ttyACM1)
+
+Führe den entsprechenden Befehl selbst aus, sobald Änderungen ein Flash erfordern – weise den Nutzer nicht nur an, selbst zu flashen. Wenn kein Gerät angeschlossen ist, schlägt `upload` erwartungsgemäß fehl; `pio run` (nur Build) kann trotzdem laufen.
