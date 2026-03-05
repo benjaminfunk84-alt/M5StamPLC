@@ -4,7 +4,7 @@ import serial, json, time, sys, os
 
 BAUD    = 115200
 LOGFILE = "/home/bfunk/m5stamplc_display_work/.cursor/debug-405cb5.log"
-TIMEOUT = 45  # Sekunden – UART-Scanner braucht ~5s, dann 15s bis Ergebnis-Reprint
+TIMEOUT = 55  # Sekunden – etwas länger, um PN532-Emulation und Verbindungsabbrüche mitzusehen
 
 # Port auto-detect
 PORT = None

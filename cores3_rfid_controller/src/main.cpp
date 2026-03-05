@@ -91,22 +91,31 @@ static unsigned long rs485LastByteMs = 0;
 static String charxPresentUid = "";
 #endif
 
+// Gemeinsame I2C-Instanz für alle externen Module (RFID2, RC522, PN532, INA226, 4Relay).
+// Bei USE_WIRE1_FOR_I2C=1 wird Wire1 (Port A 21/22) verwendet,
+// sonst der Standardbus Wire (intern, typ. 12/11 – sieht dennoch alle I2C-Geräte inkl. Port A).
+#if USE_WIRE1_FOR_I2C
+TwoWire& CoreI2C = Wire1;
+#else
+TwoWire& CoreI2C = Wire;
+#endif
+
 // ============================================
 // RFID2 – WS1850S (I2C 0x28) für Einlesen/Speichern/Schreiben am Tab5
 // ============================================
-MFRC522DriverI2C rfid2Driver{RFID2_I2C_ADDR, Wire1};
+MFRC522DriverI2C rfid2Driver{RFID2_I2C_ADDR, CoreI2C};
 MFRC522 mfrc522{rfid2Driver};
 
 // ============================================
 // RC522 I2C – Schreib-Leser am CHARX (Phoenix 1391227); Adresse 0x23, 0x24, …
 // ============================================
-MFRC522DriverI2C rc522RemoteDriver{RC522_I2C_ADDR, Wire1};
+MFRC522DriverI2C rc522RemoteDriver{RC522_I2C_ADDR, CoreI2C};
 MFRC522 mfrc522Remote{rc522RemoteDriver};
-MFRC522DriverI2C rc522RemoteDriver2{RC522_I2C_ADDR_2, Wire1};
+MFRC522DriverI2C rc522RemoteDriver2{RC522_I2C_ADDR_2, CoreI2C};
 MFRC522 mfrc522Remote2{rc522RemoteDriver2};
-MFRC522DriverI2C rc522RemoteDriver3{RC522_I2C_ADDR_3, Wire1};
+MFRC522DriverI2C rc522RemoteDriver3{RC522_I2C_ADDR_3, CoreI2C};
 MFRC522 mfrc522Remote3{rc522RemoteDriver3};
-MFRC522DriverI2C rc522RemoteDriver4{RC522_I2C_ADDR_4, Wire1};
+MFRC522DriverI2C rc522RemoteDriver4{RC522_I2C_ADDR_4, CoreI2C};
 MFRC522 mfrc522Remote4{rc522RemoteDriver4};
 
 static MFRC522* getRc522Remote() {
@@ -119,7 +128,7 @@ static MFRC522* getRc522Remote() {
 // ============================================
 // PN532 – Card Emulation (optional, I2C gleiche Adresse 0x24 möglich)
 // ============================================
-Adafruit_PN532 pn532(PN532_IRQ, PN532_RST, &Wire1);
+Adafruit_PN532 pn532(PN532_IRQ, PN532_RST, &CoreI2C);
 
 // ============================================
 // GLOBAL VARIABLES
@@ -188,14 +197,16 @@ String  emulationUid     = "";
 unsigned long emulationEndMs = 0;
 bool    emulationInited  = false;   // PN532 Target bereits initialisiert?
 bool    emulationWasActive = false; // Emulation lief zuvor – nach Ende PN532 resetten
+uint32_t emulationInitAttempts = 0; // Debug: Anzahl TgInitAsTarget-Versuche seit Start
+uint8_t emulationInitRetryCount = 0; // Anz. Init-Versuche in aktueller Emulation
 
 float cachedVoltage = 0.0f;
 float cachedCurrent = 0.0f;
 
 #if USE_WIRE1_FOR_I2C
-  TwoWire* i2cBus = &Wire1;
+  TwoWire* i2cBus = &CoreI2C;
 #else
-  TwoWire* i2cBus = &Wire;
+  TwoWire* i2cBus = &CoreI2C;
 #endif
 
 // ============================================
@@ -360,9 +371,16 @@ void setupWiFiAP() {
 void receiveCommandsUdp() {
   int n = udpCmd.parsePacket();
   if (n <= 0 || n > (int)UDP_PAYLOAD_MAX) return;
+  IPAddress remote = udpCmd.remoteIP();
+  uint16_t rport   = udpCmd.remotePort();
   char buf[UDP_PAYLOAD_MAX + 1];
   int r = udpCmd.read(buf, UDP_PAYLOAD_MAX);
+  if (r <= 0) return;
   buf[r] = '\0';
+  Serial.printf("UDP CMD von %s:%u: %s\n",
+                remote.toString().c_str(),
+                (unsigned)rport,
+                buf);
   handleCommandFromTab(String(buf));
 }
 
@@ -486,9 +504,10 @@ void handleCommandFromTab(const String &jsonStr) {
       if (wantPn532 && pn532Present) {
         emulationUid    = String(uid);
         emulationActive = true;
-        emulationInited = false;          // bei jedem Senden neu initialisieren
-        emulationEndMs  = millis() + 8000;  // 8 s – kurz wie Karte anhalten
-        Serial.printf("UID PN532-Emulation: %s (8 s)\n", uid);
+        emulationInited = false;             // bei jedem Senden neu initialisieren
+        emulationInitRetryCount = 0;         // Retry-Zähler für diese Emulation zurücksetzen
+        emulationEndMs  = millis() + 3000;   // 3 s – kurz wie Karte anhalten
+        Serial.printf("UID PN532-Emulation: %s (3 s)\n", uid);
       }
       if (!wantPn532 && !wantRs485)
         Serial.printf("UID gesetzt (target=%s)\n", target);
@@ -499,9 +518,10 @@ void handleCommandFromTab(const String &jsonStr) {
     if (uid && pn532Present) {
       emulationUid     = String(uid);
       emulationActive  = true;
-      emulationInited  = false;           // erneutes Emulate vom Tab erzwingt neue Init
-      emulationEndMs   = millis() + 8000;  // 8 s – kurz wie Karte anhalten
-      Serial.printf("Emulation: UID %s (8 s)\n", uid);
+      emulationInited  = false;              // erneutes Emulate vom Tab erzwingt neue Init
+      emulationInitRetryCount = 0;           // Retry-Zähler für diese Emulation zurücksetzen
+      emulationEndMs   = millis() + 3000;    // 3 s – kurz wie Karte anhalten
+      Serial.printf("Emulation: UID %s (3 s)\n", uid);
     }
   }
   else if (strcmp(cmd, "rfid_emulate_stop") == 0) {
@@ -569,6 +589,10 @@ static bool pn532InitAsTargetWithUid(const String &uidStr) {
     Serial.println("PN532 Init: UID zu kurz");
     return false;  // mind. 4 Byte Hex = 8 Zeichen
   }
+  emulationInitAttempts++;
+  Serial.printf("PN532 Init: Versuch %lu mit UID %s\n",
+                static_cast<unsigned long>(emulationInitAttempts),
+                uidStr.c_str());
   pn532.SAMConfig();  // PN532 vor Target-Modus in definierten Zustand
   uint8_t uid4[4];
   for (int i = 0; i < 4; i++) {
@@ -592,9 +616,12 @@ static bool pn532InitAsTargetWithUid(const String &uidStr) {
     0x74, 0x20, 0x50, 0x4e, 0x35, 0x33, 0x32
   };
   if (!pn532.sendCommandCheckAck(target, sizeof(target))) {
-    Serial.println("PN532 TgInitAsTarget fehlgeschlagen");
+    Serial.printf("PN532 TgInitAsTarget fehlgeschlagen (Versuch %lu)\n",
+                  static_cast<unsigned long>(emulationInitAttempts));
     return false;
   }
+  Serial.printf("PN532 TgInitAsTarget OK (Versuch %lu)\n",
+                static_cast<unsigned long>(emulationInitAttempts));
   return true;
 }
 
@@ -653,11 +680,18 @@ void setup() {
   i2cBus->begin(I2C_SDA, I2C_SCL);
   i2cBus->setClock(100000);
   i2cBus->setTimeOut(1000);  // 1 s I2C-Timeout, verhindert Hänger in pn532.begin()
-  Serial.printf("I2C Wire1 SDA=%d SCL=%d\n", I2C_SDA, I2C_SCL);
+  // #region agent log
+  Serial.printf("I2C bus=Wire1 SDA=%d SCL=%d\n", I2C_SDA, I2C_SCL);
+  // #endregion
 #else
-  i2cBus->begin(I2C_SDA, I2C_SCL);
+  // Für Wire (Bus 0) die von M5Unified / Arduino vordefinierten Pins verwenden (kein eigenes Pin-Mapping),
+  // damit der Bus auch dann funktioniert, wenn M5GFX das Board falsch erkennt (board:0).
+  i2cBus->begin();  // Default-Pins beibehalten (typ. 12/11 auf CoreS3)
   i2cBus->setClock(100000);
   i2cBus->setTimeOut(1000);
+  // #region agent log
+  Serial.println("I2C bus=Wire (default pins)");
+  // #endregion
 #endif
   Serial.println("I2C-Scan 0x08..0x77:");
   String foundAddr = "";
@@ -698,7 +732,9 @@ void setup() {
     Serial.println("PN532 erkannt: JA - Karte an Reader halten fuer Emulation");
     // Kein i2cBus->end()/begin(): auf CoreS3 führt das zu "Invalid pin: 22" und zerstört Wire1
   }
-  i2cBus->setTimeOut(50);  // wieder kurzer Timeout für normalen I2C-Betrieb
+  // Längeren Timeout beibehalten, damit PN532-Emulation (TgInitAsTarget / getDataTarget)
+  // nicht permanent in I2C-Timeouts (ESP_ERR_INVALID_STATE) läuft.
+  i2cBus->setTimeOut(1000);
 
   if (INA226_ADDR != 0) {
     Serial.printf("INA226 gefunden: 0x%02X\n", INA226_ADDR);
@@ -862,9 +898,17 @@ void loop() {
       Serial.println("Emulation: Timeout");
     } else {
       if (!emulationInited) {
-        if (pn532InitAsTargetWithUid(emulationUid)) {
-          emulationInited = true;
-          Serial.printf("PN532 Target: UID %s – Reader in Reichweite halten\n", emulationUid.c_str());
+        const uint8_t MAX_EMUL_INIT_RETRIES = 3;
+        if (emulationInitRetryCount >= MAX_EMUL_INIT_RETRIES) {
+          Serial.println("PN532 Emulation Init: zu viele Fehlversuche, Abbruch");
+          emulationActive = false;
+        } else {
+          if (pn532InitAsTargetWithUid(emulationUid)) {
+            emulationInited = true;
+            Serial.printf("PN532 Target: UID %s – Reader in Reichweite halten\n", emulationUid.c_str());
+          } else {
+            emulationInitRetryCount++;
+          }
         }
       }
       if (emulationInited) {

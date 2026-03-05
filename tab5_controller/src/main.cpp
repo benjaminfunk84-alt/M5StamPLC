@@ -124,9 +124,11 @@ static WiFiUDP udpRx;   // Status empfangen + Commands senden (initialisierter S
 static void sendCmd(const char* json) {
   // udpRx (mit begin() initialisiert) für Broadcast-Versand verwenden
   static const IPAddress broadcastIP(192, 168, 4, 255);
+  Serial.printf("Tab5 sendCmd → %s\n", json);
   udpRx.beginPacket(broadcastIP, UDP_CMD_PORT);
   udpRx.print(json);
-  udpRx.endPacket();
+  int rc = udpRx.endPacket();
+  Serial.printf("Tab5 sendCmd endPacket rc=%d\n", rc);
 }
 
 // Forward decl
@@ -621,14 +623,26 @@ static void drawAll(bool full) {
 // ============================================
 static void handleTouch(int tx, int ty) {
   // Scroll
-  if (rcScrollUp.hit(tx, ty))   { gTagScroll = max(0, gTagScroll - 1); gDirtyRfid = true; return; }
-  if (rcScrollDown.hit(tx, ty)) { gTagScroll++; gDirtyRfid = true; return; }
+  if (rcScrollUp.hit(tx, ty))   {
+    gTagScroll = max(0, gTagScroll - 1);
+    gDirtyRfid = true;
+    Serial.printf("Tab5 Touch: ScrollUp -> gTagScroll=%d\n", gTagScroll);
+    return;
+  }
+  if (rcScrollDown.hit(tx, ty)) {
+    gTagScroll++;
+    gDirtyRfid = true;
+    Serial.printf("Tab5 Touch: ScrollDown -> gTagScroll=%d\n", gTagScroll);
+    return;
+  }
 
   // SPEICHERN-Button (erscheint nach Tag-Erkennung im Scan-Modus)
   if (gTagFound && rcSaveBtn.hit(tx, ty)) {
     bool alreadySaved = false;
     for (int i = 0; i < (int)gTagCount; i++) { if (gTagList[i] == gFoundTag) { alreadySaved = true; break; } }
     if (!alreadySaved && gTagCount < 20) {
+      Serial.printf("Tab5 Touch: SAVE tag=%s (index=%d)\n",
+                    gFoundTag.c_str(), (int)gTagCount);
       gTagList[gTagCount++] = gFoundTag;
       sendCmd("{\"cmd\":\"rfid_learn\"}");
     }
@@ -643,6 +657,7 @@ static void handleTouch(int tx, int ty) {
   if (rcScanBtn.hit(tx, ty)) {
     gScanMode = !gScanMode;
     gScanEndMs = gScanMode ? millis() + 5000 : 0;
+    Serial.printf("Tab5 Touch: SCAN %s\n", gScanMode ? "ON" : "OFF");
     if (gScanMode) sendCmd("{\"cmd\":\"rfid_scan_start\"}");
     else           sendCmd("{\"cmd\":\"rfid_scan_stop\"}");
     gDirtyRfid = true;
@@ -654,11 +669,13 @@ static void handleTouch(int tx, int ty) {
     if (rcWritePathPn532.hit(tx, ty)) {
       gWritePathPn532 = true;
       gDirtyRelay = true;
+      Serial.println("Tab5 Touch: PATH = PN532");
       return;
     }
     if (rcWritePathRs485.hit(tx, ty)) {
       gWritePathPn532 = false;
       gDirtyRelay = true;
+      Serial.println("Tab5 Touch: PATH = RS485");
       return;
     }
   }
@@ -669,6 +686,7 @@ static void handleTouch(int tx, int ty) {
       sendCmd(cmd);
       gRelay[i]   = !gRelay[i];  // Optimistisches Update
       gDirtyRelay = true;
+      Serial.printf("Tab5 Touch: RELAY idx=%d -> %d\n", i, gRelay[i] ? 1 : 0);
       return;
     }
   }
@@ -684,6 +702,7 @@ static void handleTouch(int tx, int ty) {
       char cmd[128];
       snprintf(cmd, sizeof(cmd), "{\"cmd\":\"rfid_delete\",\"uid\":\"%s\"}", gTagList[i].c_str());
       sendCmd(cmd);
+      Serial.printf("Tab5 Touch: DELETE idx=%d uid=%s\n", i, gTagList[i].c_str());
       for (int j = i; j < gTagCount - 1; j++) gTagList[j] = gTagList[j + 1];
       if (gTagCount > 0) gTagCount--;
       if (gTagScroll > 0 && gTagScroll >= (int)gTagCount) gTagScroll--;
@@ -699,10 +718,11 @@ static void handleTouch(int tx, int ty) {
         char cmd[128];
         snprintf(cmd, sizeof(cmd), "{\"cmd\":\"rfid_emulate\",\"uid\":\"%s\"}", gTagList[i].c_str());
         sendCmd(cmd);
-        gPn532EmulEndMs = millis() + 8000;  // 8 s Anzeige wie bei RS-485
+        gPn532EmulEndMs = millis() + 3000;  // 3 s Anzeige wie PN532-Emulation auf CoreS3
         gWriteMode = false;
         gWriteIdx  = -1;
         gDirtyRfid = true;
+        Serial.printf("Tab5 Touch: SEND idx=%d via PN532 uid=%s\n", i, gTagList[i].c_str());
         return;
       }
       // RS-485: Abbrechen oder UID senden
@@ -711,6 +731,7 @@ static void handleTouch(int tx, int ty) {
           gWriteMode = false;
           gWriteIdx  = -1;
           gDirtyRfid = true;
+          Serial.printf("Tab5 Touch: SEND RS485 idx=%d -> CANCEL\n", i);
           return;
         }
         gWriteMode  = true;
@@ -719,6 +740,7 @@ static void handleTouch(int tx, int ty) {
         char cmd[160];
         snprintf(cmd, sizeof(cmd), "{\"cmd\":\"write_tag\",\"uid\":\"%s\",\"target\":\"rs485\"}", gTagList[i].c_str());
         sendCmd(cmd);
+        Serial.printf("Tab5 Touch: SEND idx=%d via RS485 uid=%s\n", i, gTagList[i].c_str());
       }
       gDirtyRfid = true;
       return;
