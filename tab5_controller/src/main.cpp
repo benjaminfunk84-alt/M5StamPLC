@@ -43,6 +43,18 @@ uint8_t gTagCount   = 0;
 bool    gConnected  = false;
 unsigned long gLastRxMs = 0;
 
+// Tag-Bibliothek (SD auf CoreS3, Darstellung/Steuerung auf Tab5)
+struct TagLibItem {
+  int    slot;
+  String uid;
+  String label;
+};
+TagLibItem gTagLib[64];
+int        gTagLibCount      = 0;
+bool       gTagLibDirty      = false;
+bool       gTagLibOpen       = false;
+unsigned long gTagLibToggleMs = 0;  // Entprellung für Öffnen/Schließen der Bibliothek
+
 // Scan-Modus (5s – neuen Tag einlesen)
 bool          gScanMode   = false;
 unsigned long gScanEndMs  = 0;
@@ -99,6 +111,10 @@ Rect rcWritePathPn532, rcWritePathRs485;  // Umschalter PN532 / RS-485 unten lin
 Rect rcScanBtn;
 Rect rcSaveBtn;
 Rect rcScrollUp, rcScrollDown;
+Rect rcTagLibBtn;           // Button zum Öffnen der Tag-Bibliothek
+Rect rcTagLibClose;         // Schließen-Button im Bibliotheks-Menü
+Rect rcTagLibLoad[64];
+Rect rcTagLibDel[64];
 
 // ============================================
 // WiFi Station + UDP (Tab5 C6 via SDIO2 → CoreS3 SoftAP)
@@ -140,6 +156,29 @@ static void processJsonLine(const char* buf) {
   JsonDocument doc;
   if (deserializeJson(doc, buf) != DeserializationError::Ok) return;
 
+  const char* cmd = doc["cmd"] | nullptr;
+  if (cmd && strcmp(cmd, "taglib_list") == 0) {
+    JsonArrayConst tArr = doc["tags"].as<JsonArrayConst>();
+    gTagLibCount = 0;
+    if (!tArr.isNull()) {
+      for (JsonObjectConst o : tArr) {
+        if (gTagLibCount >= 64) break;
+        TagLibItem it;
+        it.slot  = o["slot"]  | (int)(gTagLibCount + 1);
+        it.uid   = String(o["uid"]   | "");
+        it.label = String(o["label"] | "");
+        if (it.uid.length() == 0) continue;
+        gTagLib[gTagLibCount++] = it;
+      }
+    }
+    // #region agent log
+    Serial.printf("AGENT TAB H1: taglib_list received, count=%d rawSize=%d\n",
+                  gTagLibCount, (int)tArr.size());
+    // #endregion
+    gTagLibDirty = true;
+    return;
+  }
+
   float v = doc["u"] | gVolt;
   float a = doc["i"] | gAmp;
   bool voltChanged = (fabsf(v - gVolt) > 0.01f || fabsf(a - gAmp) > 0.001f);
@@ -159,6 +198,7 @@ static void processJsonLine(const char* buf) {
     }
   }
 
+  // Arbeitsliste (RFID-Tags im Hauptpanel)
   JsonArrayConst tArr = doc["list"].as<JsonArrayConst>();
   if (tArr.size() > 0) {
     uint8_t newCount = 0;
@@ -171,6 +211,28 @@ static void processJsonLine(const char* buf) {
       for (int i = 0; i < (int)gTagCount; i++) gTagList[i] = newList[i];
       gDirtyRfid = true;
     }
+  }
+
+  // Tag-Bibliothek wird jetzt bei jedem Status-Frame mitgesendet (Feld "taglib").
+  // Dadurch ist die Bibliothek auch dann gefüllt, wenn der explizite taglib_get-
+  // Befehl einmal nicht ankommt.
+  JsonArrayConst libArr = doc["taglib"].as<JsonArrayConst>();
+  if (!libArr.isNull()) {
+    gTagLibCount = 0;
+    for (JsonObjectConst o : libArr) {
+      if (gTagLibCount >= 64) break;
+      TagLibItem it;
+      it.slot  = o["slot"]  | (int)(gTagLibCount + 1);
+      it.uid   = String(o["uid"]   | "");
+      it.label = String(o["label"] | "");
+      if (it.uid.length() == 0) continue;
+      gTagLib[gTagLibCount++] = it;
+    }
+    // #region agent log
+    Serial.printf("AGENT TAB H2: taglib from status count=%d rawSize=%d\n",
+                  gTagLibCount, (int)libArr.size());
+    // #endregion
+    gTagLibDirty = true;
   }
 
   // Write-Fehler (falscher Kartentyp)
@@ -402,6 +464,18 @@ static void drawRfidPanel() {
   sprRfid.setCursor(16, 12);
   sprRfid.print(hdr);
 
+  // Button: TAG-SPEICHER (öffnet Bibliotheks-Menü)
+  const char* libTxt = "TAG-SPEICHER";
+  int libW = 180, libH = 28;
+  int libX = ow - libW - 16;
+  int libY = 8;
+  sprRfid.fillRoundRect(libX, libY, libW, libH, 8, (uint32_t)C_CYAN);
+  sprRfid.setTextColor(C_BLACK, C_CYAN);
+  sprRfid.setTextSize(1);
+  sprRfid.setCursor(libX + 10, libY + 10);
+  sprRfid.print(libTxt);
+  rcTagLibBtn = {px + libX, S_H + libY, libW, libH};
+
   // ---- Banner: Scan-Modus / Tag-Gefunden / Write-Modus ----
   int bannerH = 0;
   unsigned long now = millis();
@@ -604,6 +678,86 @@ static void drawRfidPanel() {
 }
 
 // ============================================
+// ZEICHNEN – Tag-Bibliothek (Overlay)
+// ============================================
+static void drawTagLibOverlay() {
+  if (!gTagLibOpen) return;
+  int px = L_W + 1;
+  int pw = DW - px;
+  int ph = DH - S_H;
+
+  // Halbtransparentes Overlay über dem RFID-Panel
+  LGFX_Sprite overlay(nullptr);
+  overlay.setPsram(true);
+  overlay.createSprite(pw, ph);
+  overlay.fillRect(0, 0, pw, ph, (uint32_t)C_BLACK);
+  overlay.setPaletteColor(0, C_BLACK);
+
+  // Hintergrund für Bibliothek
+  overlay.fillRoundRect(8, 8, pw - 16, ph - 16, 12, (uint32_t)C_PANEL);
+
+  // Titel
+  overlay.setTextColor(C_CYAN, C_PANEL);
+  overlay.setTextSize(2);
+  overlay.setCursor(24, 24);
+  overlay.print("TAG-BIBLIOTHEK");
+
+  // Schliessen-Button
+  int cbW = 100, cbH = 32;
+  int cbX = pw - cbW - 24;
+  int cbY = 20;
+  overlay.fillRoundRect(cbX, cbY, cbW, cbH, 8, (uint32_t)C_RED);
+  overlay.setTextColor(C_WHITE, C_RED);
+  overlay.setTextSize(1);
+  overlay.setCursor(cbX + 18, cbY + 10);
+  overlay.print("Zurueck");
+  rcTagLibClose = {px + cbX, S_H + cbY, cbW, cbH};
+
+  // Liste der Bibliotheks-Tags
+  int listY = 64;
+  int rowH  = 40;
+  for (int i = 0; i < gTagLibCount && i < 64; ++i) {
+    int y = listY + i * rowH;
+    if (y + rowH + 8 > ph - 16) break;
+    uint32_t bg = (uint32_t)C_CARD;
+    overlay.fillRoundRect(16, y, pw - 32, rowH - 4, 8, bg);
+
+    overlay.setTextColor(C_GREY, bg);
+    overlay.setTextSize(1);
+    overlay.setCursor(24, y + 10);
+    overlay.printf("%s", gTagLib[i].label.c_str());
+    overlay.setCursor(24, y + 24);
+    overlay.setTextColor(C_CYAN, bg);
+    String uid = gTagLib[i].uid;
+    overlay.print(uid.length() > 18 ? uid.substring(0, 18) : uid);
+
+    // Load-Button
+    int lbW = 80, lbH = 26;
+    int lbX = pw - lbW - 120;
+    int lbY = y + 6;
+    overlay.fillRoundRect(lbX, lbY, lbW, lbH, 6, (uint32_t)C_CYAN);
+    overlay.setTextColor(C_BLACK, C_CYAN);
+    overlay.setCursor(lbX + 8, lbY + 8);
+    overlay.print("LADEN");
+    rcTagLibLoad[i] = {px + lbX, S_H + lbY, lbW, lbH};
+
+    // Delete-Button
+    int dbW = 40, dbH = 26;
+    int dbX = pw - dbW - 40;
+    int dbY = lbY;
+    overlay.fillRoundRect(dbX, dbY, dbW, dbH, 6, (uint32_t)C_RED);
+    overlay.setTextColor(C_WHITE, C_RED);
+    overlay.setCursor(dbX + 12, dbY + 8);
+    overlay.print("X");
+    rcTagLibDel[i] = {px + dbX, S_H + dbY, dbW, dbH};
+  }
+
+  overlay.pushSprite(&M5.Display, px, S_H);
+  overlay.deleteSprite();
+  gTagLibDirty = false;
+}
+
+// ============================================
 // ZEICHNEN – Alles
 // ============================================
 static void drawAll(bool full) {
@@ -613,6 +767,13 @@ static void drawAll(bool full) {
     M5.Display.drawFastVLine(L_W, S_H, DH - S_H, C_DIVIDER);
     gDirtyStatus = gDirtyRelay = gDirtyRfid = true;
   }
+  // Wenn die Tag-Bibliothek geöffnet ist, zeichnet nur das Overlay den rechten Bereich.
+  // Dadurch kann es nicht mehr von darunterliegenden Panels "übermalt" werden.
+  if (gTagLibOpen) {
+    drawTagLibOverlay();
+    return;
+  }
+
   if (gDirtyStatus) drawStatusBar();
   if (gDirtyRelay)  drawRelayPanel();
   if (gDirtyRfid)   drawRfidPanel();
@@ -622,6 +783,48 @@ static void drawAll(bool full) {
 // TOUCH HANDLING
 // ============================================
 static void handleTouch(int tx, int ty) {
+  // #region agent log
+  Serial.printf("AGENT TAB H3: handleTouch tx=%d ty=%d gTagLibOpen=%d\n",
+                tx, ty, gTagLibOpen ? 1 : 0);
+  // #endregion
+
+  unsigned long now = millis();
+
+  // Zuerst: Klicks im Tag-Bibliotheks-Overlay abfangen, solange es geöffnet ist
+  if (gTagLibOpen) {
+    if (rcTagLibClose.hit(tx, ty)) {
+      // Entprellung: Mehrfache Close-Taps in kurzer Zeit ignorieren
+      if (now - gTagLibToggleMs < 400) return;
+      gTagLibToggleMs = now;
+      gTagLibOpen  = false;
+      gTagLibDirty = true;
+      Serial.println("Tab5 Touch: TAG-BIBLIOTHEK schliessen");
+      return;
+    }
+    // Einträge: Laden / Löschen
+    for (int i = 0; i < gTagLibCount && i < 64; ++i) {
+      if (rcTagLibLoad[i].hit(tx, ty)) {
+        char cmd[80];
+        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"taglib_load\",\"slot\":%d}", gTagLib[i].slot);
+        sendCmd(cmd);
+        Serial.printf("Tab5 Touch: TAG-LIB LOAD slot=%d uid=%s\n",
+                      gTagLib[i].slot, gTagLib[i].uid.c_str());
+        return;
+      }
+      if (rcTagLibDel[i].hit(tx, ty)) {
+        char cmd[80];
+        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"taglib_delete\",\"slot\":%d}", gTagLib[i].slot);
+        sendCmd(cmd);
+        Serial.printf("Tab5 Touch: TAG-LIB DELETE slot=%d uid=%s\n",
+                      gTagLib[i].slot, gTagLib[i].uid.c_str());
+        return;
+      }
+    }
+    // Wenn Overlay offen ist und kein Bibliotheks-Element getroffen wurde,
+    // sollen keine weiteren Aktionen ausgelöst werden.
+    return;
+  }
+
   // Scroll
   if (rcScrollUp.hit(tx, ty))   {
     gTagScroll = max(0, gTagScroll - 1);
@@ -661,6 +864,22 @@ static void handleTouch(int tx, int ty) {
     if (gScanMode) sendCmd("{\"cmd\":\"rfid_scan_start\"}");
     else           sendCmd("{\"cmd\":\"rfid_scan_stop\"}");
     gDirtyRfid = true;
+    return;
+  }
+
+  // Tag-Bibliothek öffnen
+  if (rcTagLibBtn.hit(tx, ty)) {
+    // Entprellung: Mehrfache Open-Taps in kurzer Zeit ignorieren
+    if (now - gTagLibToggleMs < 400) return;
+    gTagLibToggleMs = now;
+    gTagLibOpen  = true;
+    gTagLibDirty = true;
+    // Beim Öffnen aktuelle Bibliothek vom CoreS3 anfordern
+    sendCmd("{\"cmd\":\"taglib_get\"}");
+    // #region agent log
+    Serial.printf("AGENT TAB H3: TAG-BIBLIOTHEK öffnen tx=%d ty=%d\n", tx, ty);
+    // #endregion
+    Serial.println("Tab5 Touch: TAG-BIBLIOTHEK öffnen");
     return;
   }
 

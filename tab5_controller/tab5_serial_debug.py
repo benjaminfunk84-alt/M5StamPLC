@@ -6,9 +6,10 @@ BAUD    = 115200
 LOGFILE = "/home/bfunk/m5stamplc_display_work/.cursor/debug-tab5-405cb5.log"
 TIMEOUT = 55  # Sekunden – etwas länger als CoreS3-Log, damit Überlappung sicher ist
 
-# Port auto-detect – Tab5 hängt in der Regel am zweiten ACM-Port
+#!FIXED: Tab5 an /dev/ttyACM0
+# Port auto-detect – Tab5 hängt aktuell in der Regel an /dev/ttyACM0
 PORT = None
-for candidate in ["/dev/ttyACM1", "/dev/ttyACM0"]:
+for candidate in ["/dev/ttyACM0", "/dev/ttyACM1"]:
     if os.path.exists(candidate):
         PORT = candidate
         break

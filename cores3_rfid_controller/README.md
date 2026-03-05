@@ -1,6 +1,6 @@
-# M5CoreS3 RFID-Controller (ESP-NOW)
+# M5CoreS3 RFID-Controller
 
-Controller für den Modul-Stack mit **M5CoreS3**. Kommunikation zum **M5Tab5** per **ESP-NOW** – **ohne eigenes WLAN**, direkt drahtlos.
+Controller für den Modul-Stack mit **M5CoreS3**. Aktuelle Kommunikation zum **M5Tab5** per **WiFi SoftAP + UDP** (frühere ESP-NOW-Variante ist ersetzt).
 
 ## Hardware
 
@@ -50,8 +50,26 @@ Am **M5CoreS3** direkt (ohne CatM) gibt es seitlich zwei **HY2.0-4P**-Buchsen (G
 
 ## Kommunikation
 
-- **ESP-NOW:** Status-JSON wird periodisch gesendet (Broadcast); Befehle vom Tab5 werden per ESP-NOW empfangen.
-- Kein Router/Access Point nötig.
+- **WiFi SoftAP:** CoreS3 startet einen Access Point `CoreS3-AP` (Passwort `cores3pass`), Tab5 verbindet sich als Client.
+- **UDP-Status (CoreS3 → Tab5):** Der CoreS3 sendet periodisch (alle 500 ms) ein Status-JSON per UDP-Broadcast an Port **4211**:
+
+  ```json
+  {"u":12.5,"i":0.5,"rfid":"E200...","list":["..."],"err":false,
+   "wrerr":0,"wrok":1,"relays":[0,0,1,0],"beep":0,
+   "pn532":1,"rc522":0,"charx_rs485":1,"emul":0}
+  ```
+
+- **UDP-Befehle (Tab5 → CoreS3):** Das Tab5 sendet per UDP-Broadcast an Port **4210**:
+
+  - Relais schalten: `{"cmd":"set_relay","idx":0,"val":1}`
+  - Scan starten/stoppen: `{"cmd":"rfid_scan_start"}`, `{"cmd":"rfid_scan_stop"}`
+  - Tag lernen: `{"cmd":"rfid_learn"}`
+  - Tag aus Liste löschen: `{"cmd":"rfid_delete","uid":"..."}`
+  - Tag an CHARX / PN532 ausgeben:
+    - RS-485 direkt: `{"cmd":"write_tag","uid":"...", "target":"rs485"}`
+    - PN532-Emulation: `{"cmd":"write_tag","uid":"...", "target":"pn532"}` oder `{"cmd":"rfid_emulate","uid":"..."}`
+
+  Die PN532-Emulation läuft pro Befehl ca. **3 Sekunden** (wie eine reale Karte kurz an den Reader halten) und initialisiert den PN532 dabei maximal dreimal. Danach wird der Target-Modus sauber beendet, um I2C-Hänger zu vermeiden.
 
 ## Build & Upload
 
@@ -71,7 +89,41 @@ pio device monitor -b 115200
 
 ## Tab5
 
-Auf dem M5Tab5 muss ESP-NOW (auf dem ESP32-C6) implementiert werden: Empfang der Status-Nachrichten, Senden der Befehle `set_relay`, `rfid_learn`, `rfid_play` (gleiches JSON-Format wie in den Vorgaben).
+Auf dem **M5Tab5** läuft ein passendes UI-Projekt (`tab5_controller`):
+
+- Verbindet sich automatisch mit `CoreS3-AP`.
+- Zeigt Status (Spannung/Strom, Relais, gelernte Tags, PN532-/RS-485-Fähigkeit).
+- Sendet obige UDP-Befehle für **SCAN**, **Lernen/Löschen**, **Relais** und **Senden**.
+- Ein globaler Schalter wählt den Kommunikationsweg **PN532** oder **RS-485** (CHARX 3150).  
+  Der Button **„Senden“** pro Tag löst genau **eine** UID-Ausgabe über den gewählten Weg aus (pro Klick eine Emulation / ein RS-485-Telegramm).
+
+### Tag-Bibliothek (SD-Karte) & Verhalten beim Start
+
+- Gelernt werden die Tags über das **RFID2-Modul** (I2C 0x28) im Scan-Modus.
+- Jeder per `rfid_learn` übernommene Tag landet
+  - in einer **Arbeitsliste** (`rfidTagList`, max. 20 Einträge, die im Tab5-Hauptbildschirm angezeigt wird) und
+  - zusätzlich in einer **dauerhaften Tag-Bibliothek** auf der SD-Karte (`/tags_lib.json`, max. 64 Einträge).
+- Beim Neustart:
+  - Die Arbeitsliste wird **nicht** automatisch befüllt – der Tab5-Hauptbildschirm startet leer.
+  - Die Tag-Bibliothek wird aus der SD-Karte geladen; das Tab5 zeigt sie im Menü **„TAG-SPEICHER“** an.
+  - Aus der Bibliothek können Tags gezielt in die Arbeitsliste übernommen („LADEN“) oder daraus gelöscht werden.
+- Der CoreS3 sendet die komplette Bibliothek zusätzlich in jedem Status-Frame im Feld `taglib`, damit das Tab5 die Bibliothek auch bei Paketverlusten konsistent anzeigen kann.
+
+Das TAG-SPEICHER-Overlay auf dem Tab5 ist als **modales Overlay** implementiert:  
+Solange es geöffnet ist, wird nur das Overlay gezeichnet, wodurch kein „Hin-und-Her-Springen“ zwischen Haupansicht und Bibliothek mehr auftreten kann.
+
+### Serial-Logging (Debug)
+
+Im Projekt liegen zwei kleine Python-Skripte für strukturierte Logs:
+
+- `cores3_rfid_controller/serial_debug.py`
+  - Liest den **CoreS3** (typisch `/dev/ttyACM1`) mit 115200 Baud.
+  - Schreibt eine NDJSON-Logdatei nach `.cursor/debug-405cb5.log`.
+- `tab5_controller/tab5_serial_debug.py`
+  - Liest das **M5Tab5** (typisch `/dev/ttyACM0`) mit 115200 Baud.
+  - Schreibt eine NDJSON-Logdatei nach `.cursor/debug-tab5-405cb5.log`.
+
+Damit können S3- und Tab5-Verhalten (I2C-Scan, PN532, UDP-Kommandos, Tag-Bibliothek, Abstürze) zeitlich sauber korreliert werden.
 
 ## Vorgaben
 

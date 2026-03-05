@@ -12,6 +12,8 @@
 #include <MFRC522v2.h>
 #include <MFRC522DriverI2C.h>
 #include <Adafruit_PN532.h>
+#include <SPI.h>
+#include <SD.h>
 
 // ============================================
 // PIN CONFIGURATION
@@ -80,6 +82,8 @@ WiFiUDP udpStatus;
 WiFiUDP udpCmd;
 
 void handleCommandFromTab(const String &jsonStr);
+static IPAddress lastCmdIp;
+static uint16_t  lastCmdPort = 0;
 
 #if USE_RS485_PHOENIX
 // RS-485: CoreS3 = Ersatz für Phoenix-Reader am CHARX 3150. Empfang = Anfrage vom CHARX, Sendung = UID-Antwort.
@@ -167,6 +171,120 @@ static void loadTagListFromNVS() {
     Serial.printf("RFID: %u Tag(s) aus NVS geladen\n", rfidTagCount);
 }
 
+// ============================================
+// Tag-Bibliothek auf SD-Karte (dauerhafte Tags)
+// ============================================
+
+struct TagLibEntry {
+  uint16_t slot;
+  String   uid;
+  String   label;
+};
+
+static TagLibEntry tagLib[64];
+static uint16_t    tagLibCount = 0;
+static bool        sdReady     = false;
+
+// SD-Pins für CoreS3 (SPI)
+static constexpr int SD_SPI_CS_PIN   = 4;
+static constexpr int SD_SPI_SCK_PIN  = 36;
+static constexpr int SD_SPI_MISO_PIN = 35;
+static constexpr int SD_SPI_MOSI_PIN = 37;
+static const char*  TAGLIB_PATH      = "/tags_lib.json";
+
+static String makeTagLabel(uint16_t idx) {
+  char buf[16];
+  snprintf(buf, sizeof(buf), "TAG %02u", (unsigned)idx);
+  return String(buf);
+}
+
+static void saveTagLibToSD() {
+  if (!sdReady) return;
+  File f = SD.open(TAGLIB_PATH, FILE_WRITE);
+  if (!f) {
+    Serial.println("TagLib: SD open for write failed");
+    return;
+  }
+  JsonDocument doc;
+  JsonArray arr = doc["tags"].to<JsonArray>();
+  for (uint16_t i = 0; i < tagLibCount; ++i) {
+    JsonObject o = arr.add<JsonObject>();
+    o["slot"]  = tagLib[i].slot;
+    o["uid"]   = tagLib[i].uid;
+    o["label"] = tagLib[i].label;
+  }
+  if (serializeJson(doc, f) == 0) {
+    Serial.println("TagLib: serializeJson failed");
+  }
+  f.close();
+}
+
+static void loadTagLibFromSD() {
+  tagLibCount = 0;
+  if (!sdReady) return;
+  if (!SD.exists(TAGLIB_PATH)) {
+    Serial.println("TagLib: no file, start empty");
+    return;
+  }
+  File f = SD.open(TAGLIB_PATH, FILE_READ);
+  if (!f) {
+    Serial.println("TagLib: SD open for read failed");
+    return;
+  }
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, f);
+  f.close();
+  if (err) {
+    Serial.printf("TagLib: JSON parse error: %s\n", err.c_str());
+    return;
+  }
+  JsonArrayConst arr = doc["tags"].as<JsonArrayConst>();
+  if (!arr.isNull()) {
+    for (JsonObjectConst o : arr) {
+      if (tagLibCount >= 64) break;
+      TagLibEntry e;
+      e.slot  = o["slot"]  | (uint16_t)(tagLibCount + 1);
+      e.uid   = String(o["uid"]   | "");
+      e.label = String(o["label"] | makeTagLabel(e.slot));
+      if (e.uid.length() == 0) continue;
+      tagLib[tagLibCount++] = e;
+    }
+  }
+  Serial.printf("TagLib: %u Eintraege von SD geladen\n", (unsigned)tagLibCount);
+}
+
+static void addTagToLib(const String& uid) {
+  if (!sdReady) return;
+  if (uid.length() == 0) return;
+  // Duplikate vermeiden
+  for (uint16_t i = 0; i < tagLibCount; ++i) {
+    if (tagLib[i].uid == uid) return;
+  }
+  if (tagLibCount >= 64) {
+    Serial.println("TagLib: voll, Eintrag wird ignoriert");
+    return;
+  }
+  TagLibEntry e;
+  e.slot  = tagLibCount + 1;
+  e.uid   = uid;
+  e.label = makeTagLabel(e.slot);
+  tagLib[tagLibCount++] = e;
+  Serial.printf("TagLib: add uid=%s slot=%u\n", uid.c_str(), (unsigned)e.slot);
+  saveTagLibToSD();
+}
+
+static void initSD() {
+  SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN);
+  if (!SD.begin(SD_SPI_CS_PIN, SPI, 25000000)) {
+    Serial.println("SD: nicht gefunden oder Init-Fehler");
+    sdReady = false;
+    return;
+  }
+  sdReady = true;
+  Serial.println("SD: bereit");
+  loadTagLibFromSD();
+}
+
 static void saveTagListToNVS() {
   Preferences prefs;
   if (!prefs.begin(NVS_RFID_NAMESPACE, false)) return;  // read-write
@@ -177,6 +295,36 @@ static void saveTagListToNVS() {
     prefs.putString(key, rfidTagList[i]);
   }
   prefs.end();
+}
+
+// Einmalige Migration: vorhandene NVS-Tags in die SD-Tag-Bibliothek verschieben
+// und die Arbeitsliste (rfidTagList) leeren, damit sie nur noch über die Bibliothek
+// explizit geladen werden.
+static void migrateNvsTagsToTagLibIfNeeded() {
+  if (!sdReady) {
+    // SD nicht verfügbar → keine Bibliothek, also auch keine Migration
+    return;
+  }
+  if (rfidTagCount == 0) return;
+  // Wenn bereits Einträge in der Bibliothek existieren, nicht automatisch mischen,
+  // um keine doppelten/inkonsistenten Stände zu erzeugen.
+  if (tagLibCount > 0) return;
+
+  uint8_t migrated = 0;
+  for (uint8_t i = 0; i < rfidTagCount; ++i) {
+    const String &uid = rfidTagList[i];
+    if (uid.length() == 0) continue;
+    addTagToLib(uid);
+    ++migrated;
+  }
+  if (migrated > 0) {
+    // Arbeitsliste leeren – nach Neustart erscheint nichts mehr direkt im Panel,
+    // sondern nur noch in der Bibliothek, bis der Tab5 sie explizit lädt.
+    rfidTagCount = 0;
+    saveTagListToNVS();
+    Serial.printf("TagLib: Migration %u NVS-Tag(s) -> Bibliothek, Arbeitsliste geleert\n",
+                  (unsigned)migrated);
+  }
 }
 
 // UID an Gegenstelle (Phoenix CHARX) ausgeben – keine Karte am RC522, nur Übergabe der UID
@@ -364,7 +512,9 @@ void setupWiFiAP() {
   Serial.printf("SoftAP: %s  IP: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
   udpStatus.begin(UDP_STATUS_PORT);
   udpCmd.begin(UDP_CMD_PORT);
-  loadTagListFromNVS();  // Tags nach Neustart wiederherstellen
+  // Wichtig: Beim Start NICHT mehr die Arbeitsliste (rfidTagList) aus NVS laden.
+  // Persistente Tags liegen ausschließlich in der SD-Tag-Bibliothek und werden
+  // vom Tab5 über die Bibliotheks-UI geladen.
   Serial.println("UDP bereit (Status:4211 Cmd:4210)");
 }
 
@@ -373,6 +523,8 @@ void receiveCommandsUdp() {
   if (n <= 0 || n > (int)UDP_PAYLOAD_MAX) return;
   IPAddress remote = udpCmd.remoteIP();
   uint16_t rport   = udpCmd.remotePort();
+  lastCmdIp   = remote;
+  lastCmdPort = rport;
   char buf[UDP_PAYLOAD_MAX + 1];
   int r = udpCmd.read(buf, UDP_PAYLOAD_MAX);
   if (r <= 0) return;
@@ -394,6 +546,16 @@ void sendStatusUdp() {
   JsonArray tagArray = doc["list"].to<JsonArray>();
   for (uint8_t i = 0; i < rfidTagCount; i++)
     tagArray.add(rfidTagList[i]);
+  // Tag-Bibliothek (dauerhafte Tags) zusätzlich im Status mitsenden,
+  // damit das Tab5 die Bibliothek auch ohne expliziten taglib_get-Befehl
+  // immer aktuell anzeigen kann.
+  JsonArray tagLibArray = doc["taglib"].to<JsonArray>();
+  for (uint16_t i = 0; i < tagLibCount; ++i) {
+    JsonObject o = tagLibArray.add<JsonObject>();
+    o["slot"]  = tagLib[i].slot;
+    o["uid"]   = tagLib[i].uid;
+    o["label"] = tagLib[i].label;
+  }
   doc["err"] = systemError;
   doc["wrerr"] = writeErrorFlag ? 1 : 0;
   writeErrorFlag = false;
@@ -411,6 +573,7 @@ void sendStatusUdp() {
     uidToGegenstelle = "";
   }
   doc["emul"] = emulationActive ? 1 : 0;
+  doc["lib_count"] = (uint32_t)tagLibCount;
 
   char out[UDP_PAYLOAD_MAX];
   size_t n = serializeJson(doc, out, sizeof(out));
@@ -418,6 +581,30 @@ void sendStatusUdp() {
 
   IPAddress bcast(192, 168, 4, 255);
   udpStatus.beginPacket(bcast, UDP_STATUS_PORT);
+  udpStatus.write((const uint8_t*)out, n);
+  udpStatus.endPacket();
+}
+
+// Tag-Bibliothek: an Tab5 senden (Unicast, Port 4211)
+static void sendTagLibList(const IPAddress& dest) {
+  if (!dest) return;
+  JsonDocument doc;
+  doc["cmd"] = "taglib_list";
+  JsonArray arr = doc["tags"].to<JsonArray>();
+  for (uint16_t i = 0; i < tagLibCount; ++i) {
+    JsonObject o = arr.add<JsonObject>();
+    o["slot"]  = tagLib[i].slot;
+    o["uid"]   = tagLib[i].uid;
+    o["label"] = tagLib[i].label;
+  }
+  // #region agent log
+  Serial.printf("AGENT S3 H2: sendTagLibList dest=%s count=%u\n",
+                dest.toString().c_str(), (unsigned)tagLibCount);
+  // #endregion
+  char out[UDP_PAYLOAD_MAX];
+  size_t n = serializeJson(doc, out, sizeof(out));
+  if (n == 0 || n >= UDP_PAYLOAD_MAX) return;
+  udpStatus.beginPacket(dest, UDP_STATUS_PORT);
   udpStatus.write((const uint8_t*)out, n);
   udpStatus.endPacket();
 }
@@ -453,7 +640,9 @@ void handleCommandFromTab(const String &jsonStr) {
   }
   else if (strcmp(cmd, "rfid_scan_stop") == 0) {
     rfidScanMode = false;
-    lastTag      = "-";
+    // #region agent log
+    Serial.printf("AGENT H1: rfid_scan_stop lastTag=%s\n", lastTag.c_str());
+    // #endregion
     Serial.println("Scan-Modus gestoppt");
   }
   else if (strcmp(cmd, "rfid_learn") == 0) {
@@ -467,7 +656,13 @@ void handleCommandFromTab(const String &jsonStr) {
         saveTagListToNVS();
         Serial.printf("RFID learned: %s (total: %d)\n", lastTag.c_str(), rfidTagCount);
         beepFlag = 1;
+        addTagToLib(lastTag);  // auch in dauerhafte SD-Bibliothek übernehmen
       }
+    } else {
+      // #region agent log
+      Serial.printf("AGENT H1: rfid_learn ignored lastTag='%s' count=%d\n",
+                    lastTag.c_str(), rfidTagCount);
+      // #endregion
     }
   }
   else if (strcmp(cmd, "rfid_delete") == 0) {
@@ -482,6 +677,85 @@ void handleCommandFromTab(const String &jsonStr) {
           Serial.printf("RFID deleted: %s (remaining: %d)\n", uid, rfidTagCount);
           break;
         }
+      }
+    }
+  }
+  else if (strcmp(cmd, "taglib_get") == 0) {
+    sendTagLibList(lastCmdIp);
+  }
+  else if (strcmp(cmd, "taglib_load") == 0) {
+    int slot = doc["slot"] | -1;
+    if (slot > 0) {
+      for (uint16_t i = 0; i < tagLibCount; ++i) {
+        if (tagLib[i].slot == (uint16_t)slot) {
+          String uid = tagLib[i].uid;
+          if (uid.length() > 0 && rfidTagCount < 20) {
+            bool found = false;
+            for (uint8_t j = 0; j < rfidTagCount; ++j) {
+              if (rfidTagList[j] == uid) { found = true; break; }
+            }
+            if (!found) {
+              rfidTagList[rfidTagCount++] = uid;
+              saveTagListToNVS();
+              Serial.printf("TagLib load: UID %s -> Arbeitsliste (total: %d)\n",
+                            uid.c_str(), rfidTagCount);
+              beepFlag = 1;
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+  else if (strcmp(cmd, "taglib_delete") == 0) {
+    int slot = doc["slot"] | -1;
+    if (slot > 0) {
+      for (uint16_t i = 0; i < tagLibCount; ++i) {
+        if (tagLib[i].slot == (uint16_t)slot) {
+          Serial.printf("TagLib delete: slot=%d uid=%s\n",
+                        slot, tagLib[i].uid.c_str());
+          for (uint16_t j = i; j + 1 < tagLibCount; ++j) {
+            tagLib[j] = tagLib[j + 1];
+          }
+          if (tagLibCount > 0) --tagLibCount;
+          // Slots und Labels neu durchnummerieren
+          for (uint16_t k = 0; k < tagLibCount; ++k) {
+            tagLib[k].slot  = k + 1;
+            tagLib[k].label = makeTagLabel(tagLib[k].slot);
+          }
+          saveTagLibToSD();
+          break;
+        }
+      }
+    }
+  }
+  else if (strcmp(cmd, "taglib_reorder") == 0) {
+    JsonArrayConst ord = doc["order"].as<JsonArrayConst>();
+    if (!ord.isNull() && ord.size() == tagLibCount) {
+      TagLibEntry newLib[64];
+      uint16_t newCount = 0;
+      for (JsonVariantConst v : ord) {
+        int slot = v.as<int>();
+        if (slot <= 0) continue;
+        for (uint16_t i = 0; i < tagLibCount; ++i) {
+          if (tagLib[i].slot == (uint16_t)slot) {
+            if (newCount < 64) {
+              newLib[newCount++] = tagLib[i];
+            }
+            break;
+          }
+        }
+      }
+      if (newCount == tagLibCount) {
+        for (uint16_t i = 0; i < newCount; ++i) {
+          tagLib[i] = newLib[i];
+          tagLib[i].slot  = i + 1;
+          tagLib[i].label = makeTagLabel(tagLib[i].slot);
+        }
+        saveTagLibToSD();
+        Serial.println("TagLib: Reihenfolge aktualisiert");
+      } else {
+        Serial.println("TagLib: reorder ignoriert (ungueltige order-Liste)");
       }
     }
   }
@@ -593,7 +867,15 @@ static bool pn532InitAsTargetWithUid(const String &uidStr) {
   Serial.printf("PN532 Init: Versuch %lu mit UID %s\n",
                 static_cast<unsigned long>(emulationInitAttempts),
                 uidStr.c_str());
-  pn532.SAMConfig();  // PN532 vor Target-Modus in definierten Zustand
+  // #region agent log
+  uint32_t fw = pn532.getFirmwareVersion();
+  Serial.printf("AGENT PN: FW=0x%08lX\n", (unsigned long)fw);
+  bool samOk = pn532.SAMConfig();  // PN532 vor Target-Modus in definierten Zustand
+  Serial.printf("AGENT PN: SAMConfig %s\n", samOk ? "OK" : "FAIL");
+  if (!samOk) {
+    return false;
+  }
+  // #endregion
   uint8_t uid4[4];
   for (int i = 0; i < 4; i++) {
     char hex[3] = { uidStr.charAt(i*2), uidStr.charAt(i*2+1), '\0' };
@@ -674,6 +956,8 @@ void setup() {
   M5.Display.setBrightness(128);  // Nach Reset Display wieder an (vermeidet schwarzen Bildschirm)
   delay(200);
 
+  initSD();
+
 #if USE_WIRE1_FOR_I2C
   // Kein end(): auf CoreS3 führt Wire1.end() zu "Invalid pin: 22", danach funktioniert Wire1 nicht mehr.
   // Bei board:10 ist Wire1 bereits 21/22; nur begin() + setClock/setTimeOut.
@@ -730,6 +1014,7 @@ void setup() {
     }
     Serial.println("PN532 an I2C gefunden und bereit (Emulation)");
     Serial.println("PN532 erkannt: JA - Karte an Reader halten fuer Emulation");
+    Serial.println("PN532: data polling disabled (protect I2C)");
     // Kein i2cBus->end()/begin(): auf CoreS3 führt das zu "Invalid pin: 22" und zerstört Wire1
   }
   // Längeren Timeout beibehalten, damit PN532-Emulation (TgInitAsTarget / getDataTarget)
@@ -911,18 +1196,8 @@ void loop() {
           }
         }
       }
-      if (emulationInited) {
-        // Polling alle 60 ms – zu aggressives Polling (25 ms) führt zu I2C-NACK und ESP_ERR_INVALID_STATE
-        static uint32_t lastEmulPoll = 0;
-        if (now - lastEmulPoll >= 60) {
-          lastEmulPoll = now;
-          uint8_t cmd[64];
-          uint8_t cmdLen;
-          if (pn532.getDataTarget(cmd, &cmdLen)) {
-            pn532.setDataTarget(cmd, cmdLen);
-          }
-        }
-      }
+      // PN532-Datenpolling (getDataTarget/setDataTarget) ist deaktiviert,
+      // um den gemeinsamen I2C-Bus (RFID2, INA226, 4Relay) zu entlasten.
     }
   }
 
@@ -944,12 +1219,6 @@ void loop() {
         }
       }
     }
-    if (now - lastTagRefresh > RFID_TIMEOUT_MS && lastTag != "-") {
-      lastTag = "-";
-    }
-  } else {
-    // Kein aktiver Modus: kein Scan, lastTag leer
-    if (lastTag != "-") lastTag = "-";
   }
 
   // RC522 darf unter keinen Umständen lesen – nur Schreiben. Kein Polling, keine UID-Anzeige.

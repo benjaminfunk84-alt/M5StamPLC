@@ -6,9 +6,10 @@ BAUD    = 115200
 LOGFILE = "/home/bfunk/m5stamplc_display_work/.cursor/debug-405cb5.log"
 TIMEOUT = 55  # Sekunden – etwas länger, um PN532-Emulation und Verbindungsabbrüche mitzusehen
 
-# Port auto-detect
+#!FIXED: CoreS3 an /dev/ttyACM1
+# Port auto-detect – CoreS3 hängt aktuell in der Regel an /dev/ttyACM1
 PORT = None
-for candidate in ["/dev/ttyACM0", "/dev/ttyACM1"]:
+for candidate in ["/dev/ttyACM1", "/dev/ttyACM0"]:
     if os.path.exists(candidate):
         PORT = candidate
         break
