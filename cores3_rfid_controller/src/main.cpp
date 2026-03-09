@@ -27,14 +27,19 @@
 #define PN532_IRQ  4
 #define PN532_RST  5
 
-// RS-485: CoreS3 ersetzt Phoenix-Reader, direkt am CHARX 3150. Port C – RX=16, TX=17.
-// M5Stack „RS485-TTL-Konverter Unit“ (U034): Port C = GND, 5V, RX (Yellow), TX (White) → 16/17.
+// RS-485: CoreS3 am PwrCAN (M139). RS485 über DIP: Core3 RS485 CH2=G13 (TX), CH6=G7 (RX).
 #define USE_RS485_PHOENIX  1
-#define RS485_RX_PIN       16
-#define RS485_TX_PIN       17
-#define RS485_BAUD         9600   // 9,6–115,2 kBit/s (laut CHARX/Reader)
+#define RS485_RX_PIN       7    // Core3: CH6
+#define RS485_TX_PIN       13   // Core3: CH2
+#define RS485_BAUD         9600   // PwrCAN/M139: fest 9600 Bd
 #define RS485_FRAME_MS     150    // Pause = Ende Anfrage vom CHARX, danach Antwort senden
-#define RS485_DE_PIN       0      // optional: GPIO für DE/RE (0 = nicht verwendet, bei Half-Duplex setzen)
+#define RS485_DE_PIN       0      // optional: GPIO für DE/RE (0 = nicht verwendet); bei Half-Duplex z.B. 4 setzen
+#define RS485_SEND_PROACTIVE 1    // 1 = UID sofort nach write_tag senden (PwrCAN/ELATEC), nicht nur auf Anfrage
+#define RS485_DEBUG_PING   0      // 1 = PING-Testframes auf RS485 senden (nur für Debug-Zwecke aktivieren)
+// Fehlersuche: (1) Serial Monitor: "RS485 PING gesendet" + "Hex: ..." beim Senden? (2) USB-RS485 am PC 9600 8N1: PING alle 10s? Dann CoreS3+Leitung OK. (3) Gegenstelle: 9600 8N1, A/B, ggf. DE/RE.
+// PwrCAN/ELATEC RS485-Frame: max 20 Zeichen UID + 0x0d Terminator = 21 Bytes (Module 13.2 / M139)
+#define RS485_UID_PAYLOAD_MAX  20
+#define RS485_UID_FRAME_SIZE   (RS485_UID_PAYLOAD_MAX + 1)  // 21
 
 // CHARX-Steuerung per REST abfragen (laut documentation_rest_mqtt.html: GET .../data?param_list=rfid)
 // Nur wenn Steuerung im gleichen Netz erreichbar (CoreS3 AP 192.168.4.x oder CoreS3 im STA-Modus)
@@ -93,6 +98,7 @@ static int     rs485Len = 0;
 static unsigned long rs485LastByteMs = 0;
 // UID, die der CHARX bei der nächsten Abfrage „sieht“ (gesetzt durch write_tag vom Tab5)
 static String charxPresentUid = "";
+static void sendRs485UidFrame(const String &uid);  // Vorwärtsdeklaration
 #endif
 
 // Gemeinsame I2C-Instanz für alle externen Module (RFID2, RC522, PN532, INA226, 4Relay).
@@ -773,6 +779,9 @@ void handleCommandFromTab(const String &jsonStr) {
       if (wantRs485) {
         charxPresentUid = String(uid);
         Serial.printf("UID an CHARX 3150 (RS-485): %s\n", uid);
+#if RS485_SEND_PROACTIVE
+        sendRs485UidFrame(charxPresentUid);  // sofort senden (PwrCAN/ELATEC), nicht nur auf Anfrage
+#endif
       }
 #endif
       if (wantPn532 && pn532Present) {
@@ -1106,6 +1115,33 @@ void setup() {
   Serial.println("Setup complete");
 }
 
+#if USE_RS485_PHOENIX
+// Sendet UID als ASCII-Frame (max 20 Zeichen + 0x0d) auf RS485 (PwrCAN/ELATEC M139).
+static void sendRs485UidFrame(const String &uid) {
+  if (uid.length() == 0) return;
+  size_t frameLen = uid.length();
+  if (frameLen > RS485_UID_PAYLOAD_MAX) frameLen = RS485_UID_PAYLOAD_MAX;
+  uint8_t data[RS485_UID_FRAME_SIZE];
+  memcpy(data, uid.c_str(), frameLen);
+  data[frameLen] = 0x0d;
+#if (RS485_DE_PIN != 0)
+  digitalWrite(RS485_DE_PIN, HIGH);
+  delay(1);
+#endif
+  Serial2.write(data, (size_t)(frameLen + 1));
+  Serial2.flush();
+#if (RS485_DE_PIN != 0)
+  delay(1);
+  digitalWrite(RS485_DE_PIN, LOW);
+#endif
+  Serial.printf("RS-485 gesendet: UID %s (%u Bytes, 0x0d)\n", uid.c_str(), (unsigned)(frameLen + 1));
+  // Debug: genaue Bytes (zum Abgleich mit Gegenstelle)
+  Serial.print("  Hex: ");
+  for (size_t i = 0; i <= frameLen; i++) Serial.printf("%02X ", data[i]);
+  Serial.println();
+}
+#endif
+
 // ============================================
 // LOOP
 // ============================================
@@ -1132,29 +1168,33 @@ void loop() {
       Serial.print(h);
     }
     Serial.println();
-    // Antwort an CHARX: UID als 4 Bytes (8 Hex-Zeichen → 4 Byte), falls gesetzt
-    if (charxPresentUid.length() >= 8) {
-      uint8_t uid4[4];
-      for (int i = 0; i < 4; i++) {
-        char hex[3] = { charxPresentUid.charAt(i*2), charxPresentUid.charAt(i*2+1), '\0' };
-        uid4[i] = (uint8_t)strtoul(hex, nullptr, 16);
-      }
-#if (RS485_DE_PIN != 0)
-      digitalWrite(RS485_DE_PIN, HIGH);
-      delay(1);
-#endif
-      Serial2.write(uid4, 4);
-      Serial2.flush();
-#if (RS485_DE_PIN != 0)
-      delay(1);
-      digitalWrite(RS485_DE_PIN, LOW);
-#endif
-      Serial.printf("RS-485 Antwort: UID %s (4 Bytes)\n", charxPresentUid.c_str());
+    // Antwort an CHARX/PwrCAN (M139): UID als ASCII-Frame, max 20 Zeichen + 0x0d (ELATEC-kompatibel)
+    if (charxPresentUid.length() > 0) {
+      sendRs485UidFrame(charxPresentUid);
       // Nur einmal antworten: danach UID loeschen, bis Tab5 erneut write_tag sendet
       charxPresentUid = "";
     }
     rs485Len = 0;
   }
+#if RS485_DEBUG_PING
+  // Test: alle 10 s "PING\r" senden – am PC mit USB-RS485 (9600 8N1) prüfen ob überhaupt was ankommt
+  static unsigned long lastPingMs = 0;
+  if (now - lastPingMs >= 3000) {  // alle 3 s Test-PING auf RS485
+    lastPingMs = now;
+    const uint8_t ping[] = { 'P', 'I', 'N', 'G', 0x0d };
+#if (RS485_DE_PIN != 0)
+    digitalWrite(RS485_DE_PIN, HIGH);
+    delay(1);
+#endif
+    Serial2.write(ping, sizeof(ping));
+    Serial2.flush();
+#if (RS485_DE_PIN != 0)
+    delay(1);
+    digitalWrite(RS485_DE_PIN, LOW);
+#endif
+    Serial.println("RS485 PING gesendet (5 Bytes) – bei USB-RS485 am PC sichtbar?");
+  }
+#endif
 #endif
 
 #if USE_CHARX_REST_POLL
