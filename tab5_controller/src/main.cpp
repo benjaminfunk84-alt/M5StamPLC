@@ -53,7 +53,8 @@ TagLibItem gTagLib[64];
 int        gTagLibCount      = 0;
 bool       gTagLibDirty      = false;
 bool       gTagLibOpen       = false;
-unsigned long gTagLibToggleMs = 0;  // Entprellung für Öffnen/Schließen der Bibliothek
+bool       gTagLibLoadOk     = false;   // letzter Bibliotheks-Eintrag per "LADEN" gewählt
+unsigned long gTagLibToggleMs = 0;      // Entprellung für Öffnen/Schließen der Bibliothek
 
 // Scan-Modus (5s – neuen Tag einlesen)
 bool          gScanMode   = false;
@@ -460,19 +461,19 @@ static void drawRfidPanel() {
   char hdr[32];
   snprintf(hdr, sizeof(hdr), "RFID TAGS  (%d/20)", gTagCount);
   sprRfid.setTextColor(C_GREY, C_PANEL);
-  sprRfid.setTextSize(1);
-  sprRfid.setCursor(16, 12);
+  sprRfid.setTextSize(2);          // etwas größer
+  sprRfid.setCursor(16, 10);
   sprRfid.print(hdr);
 
   // Button: TAG-SPEICHER (öffnet Bibliotheks-Menü)
   const char* libTxt = "TAG-SPEICHER";
-  int libW = 180, libH = 28;
+  int libW = 234, libH = 36;  // ~30 % größer
   int libX = ow - libW - 16;
   int libY = 8;
   sprRfid.fillRoundRect(libX, libY, libW, libH, 8, (uint32_t)C_CYAN);
   sprRfid.setTextColor(C_BLACK, C_CYAN);
-  sprRfid.setTextSize(1);
-  sprRfid.setCursor(libX + 10, libY + 10);
+  sprRfid.setTextSize(2);
+  sprRfid.setCursor(libX + 12, libY + 8);
   sprRfid.print(libTxt);
   rcTagLibBtn = {px + libX, S_H + libY, libW, libH};
 
@@ -547,7 +548,7 @@ static void drawRfidPanel() {
   const int TAG_X      = 12;
   const int SCROLL_COL = 44;    // Breite der Scroll-Spalte rechts (eigene Zone)
   const int TAG_W      = ow - 24 - SCROLL_COL;  // Tags enden vor Scroll-Spalte
-  const int LIST_Y     = 34 + bannerH + 4;
+  const int LIST_Y     = 56 + bannerH;   // mehr Abstand unterhalb TAG-SPEICHER-Button
   int listH    = ph - LIST_Y - SCAN_BTN_H - 16;
   int maxVis   = max(1, listH / (TAG_H + TAG_GAP));
 
@@ -685,6 +686,7 @@ static void drawTagLibOverlay() {
   int px = L_W + 1;
   int pw = DW - px;
   int ph = DH - S_H;
+  unsigned long now = millis();
 
   // Halbtransparentes Overlay über dem RFID-Panel
   LGFX_Sprite overlay(nullptr);
@@ -698,24 +700,32 @@ static void drawTagLibOverlay() {
 
   // Titel
   overlay.setTextColor(C_CYAN, C_PANEL);
-  overlay.setTextSize(2);
+  overlay.setTextSize(3);  // etwas größer
   overlay.setCursor(24, 24);
   overlay.print("TAG-BIBLIOTHEK");
 
   // Schliessen-Button
-  int cbW = 100, cbH = 32;
+  int cbW = 130, cbH = 42;  // ~30 % größer
   int cbX = pw - cbW - 24;
   int cbY = 20;
   overlay.fillRoundRect(cbX, cbY, cbW, cbH, 8, (uint32_t)C_RED);
   overlay.setTextColor(C_WHITE, C_RED);
-  overlay.setTextSize(1);
-  overlay.setCursor(cbX + 18, cbY + 10);
+  overlay.setTextSize(2);
+  overlay.setCursor(cbX + 14, cbY + 10);
   overlay.print("Zurueck");
   rcTagLibClose = {px + cbX, S_H + cbY, cbW, cbH};
 
+  // Kurzer Hinweis nach erfolgreichem Laden
+  if (gTagLibLoadOk) {
+    overlay.setTextColor(C_GREEN, C_PANEL);
+    overlay.setTextSize(2);
+    overlay.setCursor(24, 72);
+    overlay.print("Tag geladen");
+  }
+
   // Liste der Bibliotheks-Tags
-  int listY = 64;
-  int rowH  = 40;
+  int listY = 88;
+  int rowH  = 52;  // höher, Buttons/Schrift ~30 % größer
   for (int i = 0; i < gTagLibCount && i < 64; ++i) {
     int y = listY + i * rowH;
     if (y + rowH + 8 > ph - 16) break;
@@ -723,31 +733,33 @@ static void drawTagLibOverlay() {
     overlay.fillRoundRect(16, y, pw - 32, rowH - 4, 8, bg);
 
     overlay.setTextColor(C_GREY, bg);
-    overlay.setTextSize(1);
-    overlay.setCursor(24, y + 10);
+    overlay.setTextSize(2);
+    overlay.setCursor(24, y + 8);
     overlay.printf("%s", gTagLib[i].label.c_str());
-    overlay.setCursor(24, y + 24);
+    overlay.setCursor(24, y + 30);
     overlay.setTextColor(C_CYAN, bg);
     String uid = gTagLib[i].uid;
     overlay.print(uid.length() > 18 ? uid.substring(0, 18) : uid);
 
     // Load-Button
-    int lbW = 80, lbH = 26;
+    int lbW = 104, lbH = 34;  // ~30 % größer
     int lbX = pw - lbW - 120;
-    int lbY = y + 6;
+    int lbY = y + 8;
     overlay.fillRoundRect(lbX, lbY, lbW, lbH, 6, (uint32_t)C_CYAN);
     overlay.setTextColor(C_BLACK, C_CYAN);
-    overlay.setCursor(lbX + 8, lbY + 8);
+    overlay.setTextSize(2);
+    overlay.setCursor(lbX + 10, lbY + 7);
     overlay.print("LADEN");
     rcTagLibLoad[i] = {px + lbX, S_H + lbY, lbW, lbH};
 
     // Delete-Button
-    int dbW = 40, dbH = 26;
+    int dbW = 52, dbH = 34;  // ~30 % größer
     int dbX = pw - dbW - 40;
     int dbY = lbY;
     overlay.fillRoundRect(dbX, dbY, dbW, dbH, 6, (uint32_t)C_RED);
     overlay.setTextColor(C_WHITE, C_RED);
-    overlay.setCursor(dbX + 12, dbY + 8);
+    overlay.setTextSize(2);
+    overlay.setCursor(dbX + 14, dbY + 7);
     overlay.print("X");
     rcTagLibDel[i] = {px + dbX, S_H + dbY, dbW, dbH};
   }
@@ -796,8 +808,9 @@ static void handleTouch(int tx, int ty) {
       // Entprellung: Mehrfache Close-Taps in kurzer Zeit ignorieren
       if (now - gTagLibToggleMs < 400) return;
       gTagLibToggleMs = now;
-      gTagLibOpen  = false;
-      gTagLibDirty = true;
+      gTagLibOpen   = false;
+      gTagLibLoadOk = false;
+      gTagLibDirty  = true;
       Serial.println("Tab5 Touch: TAG-BIBLIOTHEK schliessen");
       return;
     }
@@ -809,6 +822,8 @@ static void handleTouch(int tx, int ty) {
         sendCmd(cmd);
         Serial.printf("Tab5 Touch: TAG-LIB LOAD slot=%d uid=%s\n",
                       gTagLib[i].slot, gTagLib[i].uid.c_str());
+        gTagLibLoadOk = true;   // Hinweis im Overlay anzeigen
+        gTagLibDirty  = true;
         return;
       }
       if (rcTagLibDel[i].hit(tx, ty)) {

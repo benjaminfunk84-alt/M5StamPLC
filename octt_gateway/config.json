@@ -1,0 +1,16 @@
+{
+  "listenPort": 8080,
+  "coreS3Host": "192.168.0.33",
+  "coreS3CmdPort": 4210,
+  "coreS3StatusPort": 4211,
+  "charxHost": "192.168.0.11",
+  "defaultEvseId": "1",
+  "defaultConnectorId": "1",
+  "relay": {
+    "charxPower": 0,
+    "tempSensor": 1,
+    "cpUnplug": 2,
+    "parkingSensor": 3
+  }
+}
+

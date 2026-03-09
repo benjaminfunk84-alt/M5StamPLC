@@ -1,0 +1,14 @@
+{
+  "name": "octt-sut-gateway",
+  "version": "0.1.0",
+  "description": "Gateway zwischen OCTT SUT API CS und M5CoreS3/CHARX 3150",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "morgan": "^1.10.0"
+  }
+}
+

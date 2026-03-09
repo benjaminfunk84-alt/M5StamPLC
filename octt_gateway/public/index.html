@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>OCTT SUT Gateway – CoreS3</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background:#111; color:#eee; }
+    h1, h2 { color:#0ff; }
+    fieldset { margin-bottom:16px; border:1px solid #444; padding:12px; }
+    legend { padding:0 6px; color:#ccc; }
+    label { display:block; margin:4px 0; }
+    input[type=text] { width:260px; padding:4px; }
+    button { margin:4px 4px 4px 0; padding:6px 10px; cursor:pointer; }
+    #log { white-space:pre-wrap; background:#000; padding:8px; border:1px solid #444; max-height:260px; overflow-y:auto; font-size:12px; }
+    small { color:#aaa; }
+  </style>
+</head>
+<body>
+  <h1>OCTT SUT Gateway – CoreS3 / CHARX 3150</h1>
+
+  <fieldset>
+    <legend>Konfiguration</legend>
+    <label>CoreS3 IP: <input type="text" id="coreS3Host"></label>
+    <label>CoreS3 CMD-Port: <input type="text" id="coreS3CmdPort"></label>
+    <label>CoreS3 STATUS-Port: <input type="text" id="coreS3StatusPort"></label>
+    <label>CHARX IP: <input type="text" id="charxHost"></label>
+    <label>Default EVSE-ID: <input type="text" id="defaultEvseId"></label>
+    <label>Default Connector-ID: <input type="text" id="defaultConnectorId"></label>
+    <button onclick="saveConfig()">Konfiguration speichern</button>
+    <small>Basis-URL für OCTT: http://&lt;dieser-PC&gt;:<span id="listenPort">8080</span>/api/v1</small>
+  </fieldset>
+
+  <fieldset>
+    <legend>SUT API – Testaufrufe</legend>
+    <div>
+      <strong>/authorize</strong><br>
+      ID: <input type="text" id="authId" value="F2520B07">
+      Typ: <input type="text" id="authType" value="Central">
+      <button onclick="callAuthorize()">/authorize</button>
+    </div>
+    <div>
+      <strong>/plugin / /plugout</strong><br>
+      <button onclick="post('/api/v1/plugin')">/plugin</button>
+      <button onclick="post('/api/v1/plugout')">/plugout</button>
+    </div>
+    <div>
+      <strong>/parkingbay</strong><br>
+      <button onclick="post('/api/v1/parkingbay?occupied=true')">occupied=true</button>
+      <button onclick="post('/api/v1/parkingbay?occupied=false')">occupied=false</button>
+    </div>
+    <div>
+      <strong>/state</strong><br>
+      <button onclick="post('/api/v1/state?faulted=true')">faulted=true</button>
+      <button onclick="post('/api/v1/state?faulted=false')">faulted=false</button>
+    </div>
+    <div>
+      <strong>/reboot</strong><br>
+      <button onclick="post('/api/v1/reboot')">/reboot</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Status</legend>
+    <button onclick="loadStatus()">Status vom CoreS3 laden</button>
+    <div id="status"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Log</legend>
+    <div id="log"></div>
+  </fieldset>
+
+  <script>
+    async function loadConfig() {
+      const res = await fetch('/ui/config');
+      const cfg = await res.json();
+      document.getElementById('coreS3Host').value = cfg.coreS3Host;
+      document.getElementById('coreS3CmdPort').value = cfg.coreS3CmdPort;
+      document.getElementById('coreS3StatusPort').value = cfg.coreS3StatusPort;
+      document.getElementById('charxHost').value = cfg.charxHost;
+      document.getElementById('defaultEvseId').value = cfg.defaultEvseId;
+      document.getElementById('defaultConnectorId').value = cfg.defaultConnectorId;
+      document.getElementById('listenPort').textContent = cfg.listenPort || 8080;
+    }
+
+    async function saveConfig() {
+      const body = {
+        coreS3Host: document.getElementById('coreS3Host').value,
+        coreS3CmdPort: Number(document.getElementById('coreS3CmdPort').value),
+        coreS3StatusPort: Number(document.getElementById('coreS3StatusPort').value),
+        charxHost: document.getElementById('charxHost').value,
+        defaultEvseId: document.getElementById('defaultEvseId').value,
+        defaultConnectorId: document.getElementById('defaultConnectorId').value
+      };
+      const res = await fetch('/ui/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      log('Config gespeichert: ' + JSON.stringify(data.config));
+    }
+
+    async function post(path) {
+      try {
+        const res = await fetch(path, { method: 'POST' });
+        log(path + ' → ' + res.status);
+      } catch (e) {
+        log(path + ' → ERROR ' + e);
+      }
+    }
+
+    async function callAuthorize() {
+      const id = encodeURIComponent(document.getElementById('authId').value);
+      const type = encodeURIComponent(document.getElementById('authType').value);
+      await post(`/api/v1/authorize?id=${id}&type=${type}`);
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/ui/status');
+        const data = await res.json();
+        document.getElementById('status').textContent = JSON.stringify(data, null, 2);
+        log('Status geladen.');
+      } catch (e) {
+        log('Status ERROR ' + e);
+      }
+    }
+
+    function log(msg) {
+      const el = document.getElementById('log');
+      const ts = new Date().toISOString().substring(11, 19);
+      el.textContent = `[${ts}] ${msg}\n` + el.textContent;
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>
+
